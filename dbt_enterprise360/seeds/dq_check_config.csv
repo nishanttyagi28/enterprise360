@@ -10,3 +10,7 @@ assert_gmv_ge_net_gmv,KPI_NET_GMV,,core,
 assert_delivery_after_purchase,KPI_DELIVERY_DAYS,,core,
 assert_recon_raw_vs_core_orders,KPI_ORDERS,,core,
 assert_month_coverage_consistent,KPI_GMV_GROWTH,,marts,
+assert_grain_fct_orders,KPI_ORDERS,,core,grain protects order count
+assert_grain_fct_order_items,KPI_GMV,,core,grain protects GMV line sum
+assert_grain_fct_payments,KPI_PAYMENT_VALUE,,core,grain protects payment sum
+assert_no_fanout_order_items_dims,KPI_GMV,,core,dim joins must not multiply GMV lines

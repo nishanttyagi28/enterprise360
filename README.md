@@ -46,8 +46,8 @@ without lookup joins and keys are stable across rebuilds.
 ### Fan-out rules (enforced by tests)
 - Payments are **never** joined to order lines; both are rolled up to order grain first
   (`int_olist__order_items_aggregated`, `int_olist__order_payments_aggregated`).
-- Geolocation is collapsed to one row per zip prefix (`int_olist__zip_prefix_centroid`, mean lat/lng of
-  in-Brazil points, modal city/state) before any join.
+- Geolocation is collapsed to one row per zip prefix (`int_olist__zip_prefix_centroid`,
+  **median** lat/lng of in-Brazil points, modal city/state) before any join.
 - Order-level CSAT uses one review per order (`int_olist__order_review_latest`).
 - Marts aggregate each fact to the mart grain separately and join the aggregates 1:1.
 - Reconciliation tests: fact vs staging totals, order rollups vs lines/payments, marts vs facts,
@@ -78,12 +78,13 @@ source_value, mart_value, variance (+ test_type, dbt_status, execution_seconds, 
   match wins; owned by KPI & Quality). Default weight: **block = 3, warn = 1**; kpi_id NULL.
 - source/mart/variance are captured at log time from `core.dq_reconciliation` (variance = mart − source).
 
-**DQ score (KPI_DQ_SCORE)** for the latest run:
+**DQ score (KPI_DQ_SCORE)**, strict: only `pass` earns weight (`warn` and `fail` earn 0):
+`dq_score = Σ weight[status='pass'] / Σ weight` over all checks of the latest `run_id`.
+`core.dq_run_summary` (one row per run_id) exposes total/passed/warned/failed checks, failed block
+checks, total/passed/warned weight and `dq_score`, so warns are visible as their own measure:
 ```sql
-select sum(weight) filter (where status = 'pass') / sum(weight) as dq_score
-from core.dq_results where is_latest_run;
+select dq_score, warned_checks, failed_checks from core.dq_run_summary where is_latest_run;
 ```
-(warn counts as not passing.)
 
 ## Ingestion design
 - Contracts (`ingestion/sources/olist.py`): exact headers in order (typos preserved), natural keys.

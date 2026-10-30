@@ -19,3 +19,11 @@ models:
       - name: severity
         tests:
           - accepted_values: {values: [block, warn]}
+  - name: dq_run_summary
+    description: Per-run DQ summary; dq_score = passed_weight / total_weight (warn counts as not passing).
+    columns:
+      - name: run_id
+        tests: [unique, not_null]
+      - name: dq_score
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 1}

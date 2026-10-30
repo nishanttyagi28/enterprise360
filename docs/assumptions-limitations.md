@@ -19,7 +19,7 @@ Dataset in scope: **Olist Brazilian E-Commerce Public Dataset** (Kaggle `olistbr
 ## Assumptions to confirm
 - A1 Timestamps are local Brazil time, no TZ (publisher silent).
 - A2 One order_items row = one unit.
-- A3 Payment vs items+freight mismatches are vouchers/interest/rounding; observed on raw data (2026-10-30, |diff|>0.01 BRL): 772 orders with payments but no items, 291 overpaid, 89 underpaid, 1 items without payment — treated as WARN, categorised, not failed.
-- A4 dbt model/column names follow 05 STTM; no dbt models existed when tests were written.
+- A3 Payment vs items+freight (|diff|>0.01 BRL, exact numeric(12,2)): **1,076 orders** = 772 payments without items, 264 overpaid, 39 underpaid, 1 items without payment. WARN, categorised, logged under KPI_PAYMENT_VALUE. (An earlier float-based raw check reported 1,153; the extra 77 were float artefacts at exactly 0.01 BRL.)
+- A4 dbt names CONFIRMED against DE models (2026-10-30), incl. int_olist__zip_prefix_centroid, int_olist__order_items_aggregated, int_olist__order_payments_aggregated, int_olist__order_items_enriched, int_olist__month_coverage; dim_date flags is_complete_month, is_low_volume_month, is_reporting_month.
 - A5 Power BI measure names in docs/kpi-catalog.md are proposals; no powerbi/ files existed.
 - A6 Estimated delivery date is Olist's customer estimate, not a contractual SLA.

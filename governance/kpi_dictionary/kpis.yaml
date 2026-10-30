@@ -12,7 +12,7 @@ kpis:
   unit: BRL
   source:
   - olist_order_items.price
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: &id001
@@ -31,15 +31,21 @@ kpis:
   - GMV >= KPI_NET_GMV for every period
   - sum(fct_order_items.item_price) == sum(stg_olist__order_items.item_price) (tolerance 0)
   - freight excluded; see KPI_GMV_INCL_FREIGHT
-  version: 1.0.0
+  - fct_orders item rollup == fct_order_items (assert_recon_fct_orders_items_rollup)
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_order_items.item_price
+    dbt: fct_order_items.item_price; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_gmv.sql (reconciliation reference only)
     power_bi_dax: '[GMV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -54,7 +60,7 @@ kpis:
   source:
   - olist_order_items.price
   - olist_order_items.freight_value
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: *id001
@@ -65,12 +71,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - == KPI_GMV + KPI_FREIGHT (tolerance 0.00)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_order_items
@@ -88,7 +99,7 @@ kpis:
   source:
   - olist_order_items.price
   - olist_orders.order_status
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   - fct_orders
@@ -101,15 +112,20 @@ kpis:
   validation_rules:
   - <= KPI_GMV
   - label must say 'Net GMV' not 'Net Revenue'
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_order_items + fct_orders.is_canceled
+    dbt: fct_order_items + fct_orders.is_canceled; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_net_gmv.sql (reconciliation reference only)
     power_bi_dax: '[Net GMV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -123,7 +139,7 @@ kpis:
   unit: BRL
   source:
   - olist_order_items.freight_value
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: *id001
@@ -134,15 +150,20 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - freight_value >= 0
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_order_items.freight_value
+    dbt: fct_order_items.freight_value; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_freight.sql (reconciliation reference only)
     power_bi_dax: '[Freight Value]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -156,7 +177,7 @@ kpis:
   unit: ratio
   source:
   - olist_order_items
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: *id001
@@ -167,12 +188,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - ratio of sums; never average of line ratios
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_order_items
@@ -189,7 +215,7 @@ kpis:
   unit: BRL
   source:
   - olist_order_payments.payment_value
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_payments
   dimension_dependencies:
@@ -202,17 +228,23 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - fct_payments never joined to fct_order_items (fan-out)
-  - 'Per order: |sum(payment_value) − sum(item_price+freight_value)| <= 0.01 BRL else flagged (warn) — known exceptions: orders with payments but no items, vouchers, installment interest; exceptions counted
-    in dq_results, not failed'
-  version: 1.0.0
+  - 'Per order: |sum(payment_value) − sum(item_price+freight_value)| > 0.01 BRL, computed in exact numeric(12,2) (never float), is WARN not fail (dbt assert_payments_vs_items_freight). Known exceptions
+    on 2026-10-30 build: 1,076 orders = 772 payment_without_items, 264 overpaid (installment interest?), 39 underpaid (voucher/discount?), 1 items_without_payment. Counts logged to dq_results with kpi_id
+    KPI_PAYMENT_VALUE.'
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_payments.payment_value
+    dbt: fct_payments.payment_value; order grain via int_olist__order_payments_aggregated → fct_orders
     sql: dbt_enterprise360/analyses/kpi_payment_value.sql (reconciliation reference only)
     power_bi_dax: '[Payment Value]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -226,7 +258,7 @@ kpis:
   unit: count
   source:
   - olist_orders.order_id
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies: *id001
@@ -238,12 +270,17 @@ kpis:
   validation_rules:
   - order_id unique in fct_orders
   - count == distinct order_id in stg_olist__orders (tolerance 0)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_orders
@@ -260,7 +297,7 @@ kpis:
   unit: BRL
   source:
   - olist_order_items
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: *id001
@@ -272,15 +309,20 @@ kpis:
   validation_rules:
   - ratio of sums; never average of AOVs
   - denominator excludes orders with no items (e.g. some canceled/unavailable)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_order_items
+    dbt: fct_order_items; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_aov.sql (reconciliation reference only)
     power_bi_dax: '[AOV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -294,7 +336,7 @@ kpis:
   unit: ratio
   source:
   - olist_order_items
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies: *id001
@@ -305,15 +347,20 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - '>= 1'
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
     pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
   implementations:
-    dbt: fct_order_items
+    dbt: fct_order_items; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_items_per_order.sql (reconciliation reference only)
     power_bi_dax: '[Items per Order]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -327,7 +374,7 @@ kpis:
   unit: percent
   source:
   - olist_orders.order_status
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -342,12 +389,17 @@ kpis:
   validation_rules:
   - 0..1
   - order_status accepted_values test passes
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_orders.is_canceled
@@ -364,7 +416,7 @@ kpis:
   unit: count
   source:
   - olist_customers.customer_unique_id
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -377,12 +429,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - must use customer_unique_id, NOT customer_id (customer_id is per order)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_orders.customer_sk
@@ -400,7 +457,7 @@ kpis:
   source:
   - olist_customers
   - olist_orders
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -413,12 +470,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - new + returning = active
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: dim_customer.first_order_date
@@ -428,7 +490,8 @@ kpis:
 - id: KPI_REPEAT_RATE
   name: Repeat Purchase Rate
   status: SUPPORTED
-  definition: Share of customers (customer_unique_id) with ≥2 distinct orders within the selected period; customers with exactly one in-period order count in the denominator even if they ordered outside the period. Visuals must label it 'within selected period' (lifetime repeat rate = full coverage selected).
+  definition: Share of customers (customer_unique_id) with ≥2 distinct orders within the selected period; customers with exactly one in-period order count in the denominator even if they ordered outside
+    the period. Visuals must label it 'within selected period' (lifetime repeat rate = full coverage selected).
   formula: customers with ≥2 orders / customers
   numerator: repeat customers
   denominator: customers
@@ -436,7 +499,7 @@ kpis:
   source:
   - olist_customers
   - olist_orders
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -448,12 +511,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - report numerator & denominator with rate (low base expected; report as observed)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: dim_customer.lifetime_orders
@@ -463,14 +531,15 @@ kpis:
 - id: KPI_OTD_RATE
   name: On-Time Delivery Rate
   status: SUPPORTED
-  definition: Share of OTD-eligible orders (fct_deliveries.is_otd_eligible = status delivered AND delivered_customer_at not null AND delivered_customer_at >= purchased_at) whose delivered_customer_at date <= estimated_delivery_at date. Default date role is purchase date; [On-Time Delivery % (by Delivery Date)] is the same KPI on the delivery-date role.
+  definition: Share of OTD-eligible orders (fct_deliveries.is_otd_eligible = status delivered AND delivered_customer_at not null AND delivered_customer_at >= purchased_at) whose delivered_customer_at date
+    <= estimated_delivery_at date. Default date role is purchase date; [On-Time Delivery % (by Delivery Date)] is the same KPI on the delivery-date role.
   formula: count(is_otd_eligible AND is_on_time) / count(is_otd_eligible)
   numerator: on-time orders
   denominator: OTD-eligible orders
   unit: percent
   source:
   - olist_orders delivery timestamps
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_deliveries
   dimension_dependencies:
@@ -485,12 +554,17 @@ kpis:
   validation_rules:
   - exclude delivered orders missing delivered_customer_at (counted as DQ)
   - estimate is Olist's estimate, not a contractual SLA
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_deliveries.is_on_time
@@ -507,7 +581,7 @@ kpis:
   unit: days
   source:
   - olist_orders timestamps
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_deliveries
   dimension_dependencies:
@@ -522,12 +596,17 @@ kpis:
   validation_rules:
   - delivered_customer_at >= purchased_at else flagged & excluded
   - timestamps local, no TZ (ASSUMPTION)
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_deliveries.delivery_days
@@ -544,7 +623,7 @@ kpis:
   unit: hours
   source:
   - olist_orders.order_approved_at
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -556,12 +635,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - approved_at >= purchased_at
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_orders.hours_to_approve
@@ -578,7 +662,7 @@ kpis:
   unit: score
   source:
   - olist_order_reviews.review_score
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_reviews
   dimension_dependencies:
@@ -593,12 +677,17 @@ kpis:
   validation_rules:
   - score in 1..5
   - one review per order in KPI basis
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: int_olist__order_review_latest
@@ -615,7 +704,7 @@ kpis:
   unit: percent
   source:
   - olist_order_reviews
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_reviews
   dimension_dependencies:
@@ -629,12 +718,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - 0..1
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: int_olist__order_review_latest
@@ -644,14 +738,14 @@ kpis:
 - id: KPI_GMV_GROWTH
   name: GMV Growth %
   status: PARTIAL
-  definition: 'Month-over-month change in KPI_GMV (calendar month, purchase date). Named GMV growth, not revenue growth. PARTIAL: first/last coverage months are partial and sparse; return blank when either month is partial or prior GMV is 0.'
+  definition: Month-over-month change in KPI_GMV. GMV growth, not revenue growth. Only computed when BOTH the month and prior month have dim_date.is_complete_month = true; otherwise BLANK.
   formula: (GMV_t − GMV_t−1)/GMV_t−1
   numerator: ΔGMV
   denominator: GMV prior period
   unit: percent
   source:
   - olist_order_items
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   dimension_dependencies:
@@ -662,13 +756,20 @@ kpis:
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - suppress periods flagged partial in dim_date coverage
-  version: 1.0.0
+  - BLANK unless is_complete_month for current and prior month (int_olist__month_coverage → dim_date)
+  - is_low_volume_month months shown with caution flag; is_reporting_month governs default report range
+  - assert_month_coverage_consistent passes
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_order_items
@@ -678,7 +779,8 @@ kpis:
 - id: KPI_CUSTOMER_RETENTION
   name: Customer Retention Rate
   status: PARTIAL
-  definition: 'Share of customers (customer_unique_id) active in the previous calendar month who order again in the current month. PARTIAL: very low repeat base makes it statistically unstable; show alongside [Retention Cohort Size].'
+  definition: 'Share of customers (customer_unique_id) active in the previous calendar month who order again in the current month. PARTIAL: very low repeat base makes it statistically unstable; show alongside
+    [Retention Cohort Size].'
   formula: retained / prior active
   numerator: retained
   denominator: prior-period active
@@ -686,7 +788,7 @@ kpis:
   source:
   - olist_customers
   - olist_orders
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_orders
   dimension_dependencies:
@@ -699,12 +801,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - show cohort size
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_orders
@@ -721,7 +828,7 @@ kpis:
   unit: percent
   source:
   - core.dq_results
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - core.dq_results
   dimension_dependencies:
@@ -733,12 +840,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - weights per 16 DQ framework
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: core.dq_results
@@ -755,7 +867,7 @@ kpis:
   unit: BRL/count
   source:
   - core.dq_results
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - core.dq_results
   dimension_dependencies:
@@ -767,12 +879,17 @@ kpis:
   benchmark: to be set by owner
   validation_rules:
   - counts tolerance 0; amounts 0.01 BRL
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: core.dq_results
@@ -782,7 +899,8 @@ kpis:
 - id: KPI_SELLER_HANDOVER_OTD
   name: Seller Handover On-Time Rate
   status: PARTIAL
-  definition: 'Share of order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item''s fct_order_items.shipping_limit_at, counting only items with both timestamps. PARTIAL: Olist records the carrier handover once per order, so every seller in a multi-seller order is measured against the same handover time.'
+  definition: 'Share of order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item''s fct_order_items.shipping_limit_at, counting only items with both timestamps. PARTIAL:
+    Olist records the carrier handover once per order, so every seller in a multi-seller order is measured against the same handover time.'
   formula: count(items where delivered_carrier_at <= shipping_limit_at) / count(items with both timestamps)
   numerator: items handed over on time
   denominator: items with both delivered_carrier_at and shipping_limit_at
@@ -790,7 +908,7 @@ kpis:
   source:
   - olist_order_items.shipping_limit_date
   - olist_orders.order_delivered_carrier_date
-  source_tag: PROPOSED (Olist columns CONFIRMED FACT; dbt names confirmed in fct_order_items and fct_deliveries)
+  source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
   - fct_order_items
   - fct_deliveries
@@ -808,12 +926,17 @@ kpis:
   - flag multi-seller orders; seller-level values for them share one order-level handover time
   - shipping_limit_at is Olist's seller deadline, not a contractual SLA
   - timestamp comparison, not date-only
-  version: 1.0.0
+  version: 1.1.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
     author: KPI & Quality
     change: Added at Power BI's request as an item-grain seller handover measure
+    pr: TBD
+  - version: 1.1.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
   implementations:
     dbt: fct_order_items.shipping_limit_at joined to fct_deliveries.delivered_carrier_at on order_id (no fan-out, deliveries is one row per order)

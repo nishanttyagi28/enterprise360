@@ -36,13 +36,15 @@ def test_order_status_domain(duck):
 
 def test_payments_vs_items_freight_exceptions_categorised(duck):
     rows = duck.execute("""
-      with p as (select order_id, sum(payment_value) pay from order_payments group by 1),
-           i as (select order_id, sum(price+freight_value) itm from order_items group by 1)
+      with p as (select order_id, sum(payment_value::decimal(12,2)) pay from order_payments group by 1),
+           i as (select order_id, sum(price::decimal(12,2)+freight_value::decimal(12,2)) itm from order_items group by 1)
       select case when i.order_id is null then 'payment_without_items'
                   when p.order_id is null then 'items_without_payment'
                   when p.pay>i.itm then 'overpaid' else 'underpaid' end cat, count(*)
       from p full join i using(order_id) where abs(coalesce(pay,0)-coalesce(itm,0))>0.01 group by 1""").fetchall()
-    print("payment vs items+freight exceptions:", rows)
+    # Exact decimal(12,2) like Postgres numeric; floats create 77 spurious exact-0.01 diffs.
+    got = dict(rows)
+    assert got == {"payment_without_items": 772, "items_without_payment": 1, "overpaid": 264, "underpaid": 39}, got
     assert all(cat in {"payment_without_items","items_without_payment","overpaid","underpaid"} for cat,_ in rows)
 
 def test_no_fanout_geolocation_raw_join(duck):
