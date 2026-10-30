@@ -142,6 +142,10 @@ kpis:
     author: KPI & Quality
     change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
+  supporting_measures:
+  - measure: '[GMV Excluded from Net]'
+    purpose: '[GMV] - [Net GMV]: GMV of canceled/unavailable orders (about 0.715% of GMV overall at the 2026-10-30 build). Shown as a trend, not a KPI.'
+    kind: breakdown
   implementations:
     dbt: fct_order_items + fct_orders.is_canceled; order grain via int_olist__order_items_aggregated (from int_olist__order_items_enriched)
     sql: dbt_enterprise360/analyses/kpi_net_gmv.sql (reconciliation reference only)
@@ -815,7 +819,7 @@ kpis:
 - id: KPI_GMV_GROWTH
   name: GMV Growth %
   status: PARTIAL
-  definition: Month-over-month change in KPI_GMV. GMV growth, not revenue growth. Only computed when BOTH the month and prior month have dim_date.is_complete_month = true; otherwise BLANK.
+  definition: Month-over-month change in KPI_GMV. GMV growth, not revenue growth. Only computed when BOTH the month and prior month have dim_date.is_complete_month = true AND dim_date.is_reporting_month = true; otherwise BLANK.
   formula: (GMV_t − GMV_t−1)/GMV_t−1
   numerator: ΔGMV
   denominator: GMV prior period
@@ -833,10 +837,10 @@ kpis:
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - BLANK unless is_complete_month for current and prior month (int_olist__month_coverage → dim_date)
+  - BLANK unless is_complete_month AND is_reporting_month for current and prior month (int_olist__month_coverage → dim_date)
   - is_low_volume_month months shown with caution flag; is_reporting_month governs default report range
   - assert_month_coverage_consistent passes
-  version: 1.1.0
+  version: 1.2.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
@@ -847,6 +851,11 @@ kpis:
     date: '2026-10-30'
     author: KPI & Quality
     change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
+    pr: TBD
+  - version: 1.2.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: also BLANK unless is_reporting_month for current and prior month (aligned with Power BI and mart_business_overview_monthly)
     pr: TBD
   implementations:
     dbt: fct_order_items
@@ -1522,6 +1531,10 @@ kpis:
     author: KPI & Quality
     change: Aligned to DE as-built uci_* models
     pr: TBD
+  supporting_measures:
+  - measure: '[UCI Lines Without Customer ID %]'
+    purpose: 'Share of UCI fact lines with no Customer ID (22.76% at the 2026-10-30 build). These lines are excluded from all UCI customer KPIs; show this share next to them.'
+    kind: dq_exclusion
   implementations:
     dbt: 'uci_fct_invoices (daily snapshot: uci_mart_sales_daily.active_customers)'
     sql: dbt_enterprise360/analyses/uci/kpi_uci_active_customers.sql (reconciliation reference only)

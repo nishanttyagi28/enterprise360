@@ -27,7 +27,7 @@ Olist GMV = SUM(item_price), freight excluded. UCI Gross Sales = invoiced value.
 | KPI_APPROVAL_HOURS | Order Approval Time | SUPPORTED | 1.1.0 | `AVG(approved_at − purchased_at)` | order | fct_orders.hours_to_approve | [Avg Approval Hours] | Head of Operations |
 | KPI_REVIEW_SCORE | Average Review Score | SUPPORTED | 1.1.0 | `AVG(review_score) over int_olist__order_review_latest` | order (latest review) | int_olist__order_review_latest | [Avg Review Score] | Head of CX |
 | KPI_LOW_REVIEW_RATE | Low Review Share | SUPPORTED | 1.1.0 | `orders score<=2 / orders reviewed` | order | int_olist__order_review_latest | [Low Review %] | Head of CX |
-| KPI_GMV_GROWTH | GMV Growth % | PARTIAL | 1.1.0 | `(GMV_t − GMV_t−1)/GMV_t−1` | month | fct_order_items | [GMV Growth %] | Head of Sales |
+| KPI_GMV_GROWTH | GMV Growth % | PARTIAL | 1.2.0 | `(GMV_t − GMV_t−1)/GMV_t−1` | month | fct_order_items | [GMV Growth %] | Head of Sales |
 | KPI_CUSTOMER_RETENTION | Customer Retention Rate | PARTIAL | 1.1.0 | `retained / prior active` | cohort × period | fct_orders | [Customer Retention %] | Head of CRM |
 | KPI_DQ_SCORE | Data Quality Score | SUPPORTED | 1.2.0 | `Σ(weight where status='pass') / Σ(weight)` | run_id | core.dq_run_summary.dq_score | [DQ Score %] | Data Platform Lead |
 | KPI_RECON_VARIANCE | Reconciliation Variance | SUPPORTED | 1.1.0 | `mart_value − source_value` | kpi × run | core.dq_results | [Reconciliation Variance] | Data Platform Lead |
@@ -39,6 +39,7 @@ Approved helper measures; not KPIs themselves.
 
 | KPI | Measure | Kind | Purpose |
 |---|---|---|---|
+| KPI_NET_GMV | [GMV Excluded from Net] | breakdown | [GMV] - [Net GMV]: GMV of canceled/unavailable orders (about 0.715% of GMV overall at the 2026-10-30 build). Shown as a trend, not a KPI. |
 | KPI_PAYMENT_VALUE | [Payment Mix %] | breakdown | Share of payment value by payment type; labelled payment mix, never sales |
 | KPI_PAYMENT_VALUE | [Payment Records] | breakdown | Count of payment rows (order_id, payment_sequential) |
 | KPI_PAYMENT_VALUE | [Payment Mismatch Orders] | dq_exclusion | Orders with |payment − (items+freight)| > 0.01 BRL, exact numeric; currently 1,076. Payments without items drop out under product or seller filters (no item lines to match). |
@@ -86,7 +87,7 @@ Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg
 - **KPI_APPROVAL_HOURS** — Mean hours purchase → payment approval. Rules: approved_at >= purchased_at
 - **KPI_REVIEW_SCORE** — Mean review score (1–5) using latest review per order. Proxy for satisfaction; not surveyed CSAT. Rules: score in 1..5; one review per order in KPI basis
 - **KPI_LOW_REVIEW_RATE** — Share of reviewed orders scoring 1–2 (proxy for complaints). Rules: 0..1
-- **KPI_GMV_GROWTH** — Month-over-month change in KPI_GMV. GMV growth, not revenue growth. Only computed when BOTH the month and prior month have dim_date.is_complete_month = true; otherwise BLANK. Rules: BLANK unless is_complete_month for current and prior month (int_olist__month_coverage → dim_date); is_low_volume_month months shown with caution flag; is_reporting_month governs default report range; assert_month_coverage_consistent passes
+- **KPI_GMV_GROWTH** — Month-over-month change in KPI_GMV. GMV growth, not revenue growth. Only computed when BOTH the month and prior month have dim_date.is_complete_month = true AND dim_date.is_reporting_month = true; otherwise BLANK. Rules: BLANK unless is_complete_month AND is_reporting_month for current and prior month (int_olist__month_coverage → dim_date); is_low_volume_month months shown with caution flag; is_reporting_month governs default report range; assert_month_coverage_consistent passes
 - **KPI_CUSTOMER_RETENTION** — Share of customers (customer_unique_id) active in the previous calendar month who order again in the current month. PARTIAL: very low repeat base makes it statistically unstable; show alongside [Retention Cohort Size]. Rules: show cohort size
 - **KPI_DQ_SCORE** — Strict severity-weighted DQ score for a dbt run: only status 'pass' earns weight; 'warn' counts as not-pass (earns 0); skipped counts as fail. Weights: block=3, warn=1 (dq_check_config default). Default view = latest run (is_latest_run). Rules: core.dq_run_summary.dq_score == Σ(pass×weight)/Σ(weight) over core.dq_results for the same run_id (verified 2026-10-30 latest run: 505/506 = 0.9980); warn earns 0; skipped → fail; default filter is_latest_run = true; weights block=3, warn=1 unless overridden in dq_check_config
 - **KPI_RECON_VARIANCE** — Difference of key KPIs between staging/source and marts/BI. Rules: counts tolerance 0; amounts 0.01 BRL
@@ -129,6 +130,14 @@ Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg
 | KPI_UCI_RFM_SEGMENT | UCI RFM Segment | PARTIAL | 1.1.0 | `ntile(5) on recency_days (desc), frequency, monetary_net_sales_proxy_gbp` | customer at snapshot | uci_mart_customer_rfm.r_score, f_score, m_score | [UCI Customers by RFM Segment] (proposed; confirm with Power BI) | Head of CRM (UCI) |
 | KPI_UCI_PRODUCT_CONTRIBUTION | UCI Product Contribution % | SUPPORTED | 1.1.0 | `SUM(gross_sales) for product / SUM(gross_sales) all` | stock_code × month | uci_mart_product_monthly.gross_sales | [UCI Product Contribution %] (proposed; confirm with Power BI) | Head of Merchandising (UCI) |
 | KPI_UCI_COUNTRY_CONTRIBUTION | UCI Country Contribution % | SUPPORTED | 1.1.0 | `SUM(gross_product_sales) for country / total` | country × month | uci_mart_country_monthly.gross_product_sales | [UCI Country Contribution %] (proposed; confirm with Power BI) | Head of Sales (UCI) |
+
+### Supporting measures (uci)
+
+Approved helper measures; not KPIs themselves.
+
+| KPI | Measure | Kind | Purpose |
+|---|---|---|---|
+| KPI_UCI_ACTIVE_CUSTOMERS | [UCI Lines Without Customer ID %] | dq_exclusion | Share of UCI fact lines with no Customer ID (22.76% at the 2026-10-30 build). These lines are excluded from all UCI customer KPIs; show this share next to them. |
 
 ### Definitions and validation rules (uci)
 
