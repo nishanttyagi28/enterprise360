@@ -22,3 +22,6 @@ logs/
 .prefect/
 .vscode/*
 !.vscode/extensions.json
+
+# generated MIS workbooks (python -m reporting.export_mis)
+reports/*.xlsx
