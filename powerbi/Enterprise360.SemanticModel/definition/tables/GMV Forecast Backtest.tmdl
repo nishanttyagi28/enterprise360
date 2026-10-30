@@ -63,6 +63,14 @@ table 'GMV Forecast Backtest'
 
 		annotation SummarizationSetBy = User
 
+	column 'Model Role'
+		dataType: string
+		lineageTag: 7478fcc5-ebf2-537f-8aa3-6b5601f43be0
+		summarizeBy: none
+		sourceColumn: model_role
+
+		annotation SummarizationSetBy = User
+
 	partition 'GMV Forecast Backtest' = m
 		mode: import
 		source =
@@ -72,9 +80,11 @@ table 'GMV Forecast Backtest'
 					Selected = Table.SelectColumns(Data, {"series", "model", "split", "n_months", "mae", "smape_pct", "is_selected_model"}),
 					GmvOnly = Table.SelectRows(Selected, each [series] = "gmv" and List.Contains({"validation", "test"}, [split])),
 					Fc = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast"]}[Data],
-					Models = List.RemoveNulls(List.Distinct(Fc[selected_model] & Fc[baseline_model])),
-					ModelRows = Table.SelectRows(GmvOnly, each List.Contains(Models, [model])),
-					Money = Table.TransformColumnTypes(ModelRows, {{"mae", Currency.Type}, {"smape_pct", Currency.Type}})
+					Sel = List.First(List.RemoveNulls(List.Distinct(Fc[selected_model]))),
+					Base = List.First(List.RemoveNulls(List.Distinct(Fc[baseline_model]))),
+					ModelRows = Table.SelectRows(GmvOnly, each [model] = Base or [model] = Sel),
+					Role = Table.AddColumn(ModelRows, "model_role", each if [model] = Sel and [model] = Base then "selected baseline" else if [model] = Base then "baseline" else "selected", type text),
+					Money = Table.TransformColumnTypes(Role, {{"mae", Currency.Type}, {"smape_pct", Currency.Type}})
 				in
 					Money
 

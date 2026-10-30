@@ -93,6 +93,21 @@
               "queryRef": "_Measures.Cohort Is Mature",
               "nativeQueryRef": "Cohort Is Mature",
               "displayName": "Cohort mature (1 = yes)"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Deal Window Complete"
+                }
+              },
+              "queryRef": "_Measures.Deal Window Complete",
+              "nativeQueryRef": "Deal Window Complete",
+              "displayName": "Deal window complete (1 = yes)"
             }
           ]
         }
@@ -276,7 +291,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Partial: wins are recorded only from Dec 2017, so 2017 cohorts look low because of how deals were recorded, not performance. Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018)'"
+                  "Value": "'Partial. Grey = incomplete deal window (Jun-Nov 2017 cohorts start before wins were recorded in Dec 2017, so they look low because of how deals were recorded, not performance). Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018). Teal = complete and mature'"
                 }
               }
             },

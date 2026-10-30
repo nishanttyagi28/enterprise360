@@ -261,6 +261,22 @@ Only `[GMV Forecast]`, `[GMV Forecast Lower/Upper]`, `[GMV Baseline (Naive)]`, `
   - Anomalies: 0 GMV anomaly months. Nov 2017 GMV z is 2.84; its orders z is now 4.76.
   - Forecast 2018-09..2019-02: 939,062 … 1,033,841.
 
+**Deal window (f1a3af8):** `[Deal Window Complete]` (formatting, parent KPI_FUNNEL_CONVERSION_RATE) is 1/0 per cohort month and BLANK unless exactly one Date[Year Month] is in context.
+- **Rule:** it uses the same rule as `mart_funnel_monthly.is_deal_window_complete` (first-contact month >= first won month, 2017-12), derived from lead and deal rows. A SQL check against the mart matched for all 12 cohorts: 2017-06..2017-11 = incomplete, 2017-12..2018-05 = complete.
+- **Cohort chart colours:**
+
+| Colour | Meaning |
+|---|---|
+| Grey #6B7280 | incomplete deal window |
+| Amber #B45309 | immature |
+| Teal #0E7490 | complete and mature |
+
+- **Tooltip and subtitle:** the tooltip shows both flags, and the subtitle explains all three colours.
+
+**Backtest baseline:** the M load reads `selected_model` and `baseline_model` from `mart_gmv_forecast`. It keeps the baseline rows plus the selected model's rows, and adds `Model Role` (selected / baseline / selected baseline).
+- `[Backtest Test sMAPE (Baseline)]` is keyed on the baseline's name (naive_last_value) through Model Role, not on "not selected".
+- If the baseline itself is selected, the verdict reads "Baseline (naive_last_value) was selected; no separate model to compare on the test period (test sMAPE x%)".
+
 **Column notes vs the spec:**
 - `mart_gmv_forecast_backtest` has an extra `series` column (gmv/orders); it is filtered to gmv in M.
 - `smape_pct` is stored in percent units (28.2545), so it is divided by 100.

@@ -391,10 +391,15 @@ FC_TABLES = [
      "steps": ([f'Typed = Table.TransformColumnTypes(Selected, {{{{"{_fc_src(t, "Forecast Month")}", type date}}}})'] if t == "GMV Forecast" else
                [f'GmvOnly = Table.SelectRows(Selected, each [{_fc_src(t, "series")}] = "gmv" and List.Contains({{"validation", "test"}}, [{_fc_src(t, "Split")}]))',
                 f'Fc = Source{{[Schema = PgSchemaMarts, Item = "{FC_MARTS["GMV Forecast"]}"]}}[Data]',
-                f'Models = List.RemoveNulls(List.Distinct(Fc[{FC_OPTIONAL_SRC["GMV Forecast"]["Selected Model"]}] & Fc[{FC_OPTIONAL_SRC["GMV Forecast"]["Baseline Model"]}]))',
-                f'ModelRows = Table.SelectRows(GmvOnly, each List.Contains(Models, [{_fc_src(t, "Model")}]))'] if t == "GMV Forecast Backtest" else
+                f'Sel = List.First(List.RemoveNulls(List.Distinct(Fc[{FC_OPTIONAL_SRC["GMV Forecast"]["Selected Model"]}])))',
+                f'Base = List.First(List.RemoveNulls(List.Distinct(Fc[{FC_OPTIONAL_SRC["GMV Forecast"]["Baseline Model"]}])))',
+                f'ModelRows = Table.SelectRows(GmvOnly, each [{_fc_src(t, "Model")}] = Base or [{_fc_src(t, "Model")}] = Sel)',
+                f'Role = Table.AddColumn(ModelRows, "model_role", each if [{_fc_src(t, "Model")}] = Sel and [{_fc_src(t, "Model")}] = Base then "selected baseline" else if [{_fc_src(t, "Model")}] = Base then "baseline" else "selected", type text)'] if t == "GMV Forecast Backtest" else
                [f'Typed = Table.TransformColumnTypes(Selected, {{{{"{_fc_src(t, "Month")}", type date}}}})'])}
     for t in FC_SRC]
+_bt = next(t for t in FC_TABLES if t["name"] == "GMV Forecast Backtest")
+_bt["select"] = [src for _, src, _, _ in _bt["cols"]]
+_bt["cols"].append(("Model Role", "model_role", "string", {"summarize": "none"}))  # added in M: selected | baseline | selected baseline
 TABLES.extend(FC_TABLES)
 
 # --------------------------------------------------------------------------------------
@@ -860,9 +865,17 @@ FUNNEL_MEASURES = [
       "RETURN",
       f"    IF ( NOT HASONEVALUE ( 'Date'[Year Month] ) || ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + {FUNNEL_MATURITY_DAYS} <= _maxWon, 1, 0 ) )"],
      "Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Per cohort month only: BLANK unless exactly one Date[Year Month] is in context, so it never shows at total level."),
+    (FF, "Deal Window Complete", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", "0",
+     ["VAR _firstWon = CALCULATE ( MIN ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )",
+      "VAR _firstWonMonth = DATE ( YEAR ( _firstWon ), MONTH ( _firstWon ), 1 )",
+      "VAR _cohort = MAX ( 'Lead'[First Contact Date] )",
+      "VAR _cohortMonth = DATE ( YEAR ( _cohort ), MONTH ( _cohort ), 1 )",
+      "RETURN",
+      "    IF ( NOT HASONEVALUE ( 'Date'[Year Month] ) || ISBLANK ( _cohort ), BLANK (), IF ( _cohortMonth >= _firstWonMonth, 1, 0 ) )"],
+     "Supporting measure (formatting): 1 = deal window complete, 0 = cohort starts before the first won month (2017-12; earlier wins not recorded, left-censored: 2017-06..2017-11). Same rule as mart_funnel_monthly.is_deal_window_complete (first_contact_month >= first won month), derived from lead rows. Per cohort month only; BLANK unless exactly one Date[Year Month] is in context."),
     (FF, "Cohort Maturity Colour", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", None,
-     ["IF ( [Cohort Is Mature] == 0, \"#B45309\", \"#0E7490\" )"],
-     "Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature."),
+     ["IF ( [Deal Window Complete] == 0, \"#6B7280\", IF ( [Cohort Is Mature] == 0, \"#B45309\", \"#0E7490\" ) )"],
+     "Hidden formatting helper: grey #6B7280 = incomplete deal window (2017-06..2017-11, wins not recorded), amber #B45309 = immature cohort (Apr-May 2018), accent #0E7490 = complete and mature."),
     (FF, "Median Days to Close", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", "0",
      ["MEDIANX (", "    FILTER ( 'Closed Deal', NOT ISBLANK ( 'Closed Deal'[days_to_close] ) && 'Closed Deal'[days_to_close] >= 0 ),",
       "    'Closed Deal'[days_to_close]", ")"],
@@ -878,7 +891,7 @@ MEASURES.extend(FUNNEL_MEASURES)
 HIDDEN_MEASURES.add("Cohort Maturity Colour")
 SUPPORT_KIND.update({"MQLs by Origin": "breakdown", "Closed Deals by Business Segment": "breakdown",
                      "Closed Deals by Lead Type": "breakdown", "Unmatched Closed Deals": "dq_exclusion",
-                     "Converted Leads in Cohort": "breakdown", "Cohort Is Mature": "formatting",
+                     "Converted Leads in Cohort": "breakdown", "Cohort Is Mature": "formatting", "Deal Window Complete": "formatting",
                      "Cohort Maturity Colour": "formatting", "Negative Duration Deals": "dq_exclusion",
                      "Closed Deals by Days-to-Close Bucket": "breakdown"})
 
@@ -925,14 +938,19 @@ FC_MEASURES = [
 _BT_TEST = f"REMOVEFILTERS ( {FCB} ), {FCB}[Split] = \"test\""
 FC_MEASURES += [
     (FCF, "Backtest Test sMAPE (Model)", "KPI_GMV_FORECAST", "PARTIAL", "0.00%",
-     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Is Selected Model] = TRUE () )"],
+     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Model Role] IN {{ \"selected\", \"selected baseline\" }} )"],
      "Supporting measure (breakdown): selected model's test sMAPE (drives the dynamic backtest verdict)."),
     (FCF, "Backtest Test sMAPE (Baseline)", "KPI_GMV_FORECAST", "PARTIAL", "0.00%",
-     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Is Selected Model] = FALSE () )"],
-     "Supporting measure (breakdown): naive baseline's test sMAPE (drives the dynamic backtest verdict)."),
+     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Model Role] IN {{ \"baseline\", \"selected baseline\" }} )"],
+     "Supporting measure (breakdown): test sMAPE of the baseline model named in mart_gmv_forecast.baseline_model (naive_last_value), keyed on Model Role, not on 'not selected'."),
     (FCF, "Backtest Test Verdict", "KPI_GMV_FORECAST", "PARTIAL", None,
-     ["VAR _m = [Backtest Test sMAPE (Model)]", "VAR _b = [Backtest Test sMAPE (Baseline)]", "RETURN",
-      "    IF (", "        ISBLANK ( _m ) || ISBLANK ( _b ), BLANK (),",
+     ["VAR _m = [Backtest Test sMAPE (Model)]", "VAR _b = [Backtest Test sMAPE (Baseline)]",
+      f"VAR _baseSelected = CALCULATE ( COUNTROWS ( {FCB} ), REMOVEFILTERS ( {FCB} ), {FCB}[Model Role] = \"selected baseline\" ) > 0",
+      f"VAR _baseName = CALCULATE ( MAX ( {FCB}[Model] ), REMOVEFILTERS ( {FCB} ), {FCB}[Model Role] IN {{ \"baseline\", \"selected baseline\" }} )",
+      "RETURN",
+      "    SWITCH ( TRUE (),", "        _baseSelected,",
+      "        \"Baseline (\" & _baseName & \") was selected; no separate model to compare on the test period (test sMAPE \" & FORMAT ( _b, \"0.00%\" ) & \")\",",
+      "        ISBLANK ( _m ) || ISBLANK ( _b ), BLANK (),",
       "        \"Model \" & IF ( _m < _b, \"beats\", \"does not beat\" ) & \" the naive baseline on the test period (test sMAPE \"",
       "            & FORMAT ( _m, \"0.00%\" ) & \" vs \" & FORMAT ( _b, \"0.00%\" ) & \")\"", "    )"],
      "Supporting measure (formatting): dynamic text comparing model vs baseline test sMAPE from mart_gmv_forecast_backtest."),
@@ -1489,8 +1507,8 @@ PAGES.append(dq)
 # ---- Marketing Funnel (Olist funnel dataset; Date = first contact for leads, won date for deals)
 FUNNEL_TREND_NOTE = ("MQLs by first-contact month, deals by won month: different time axes, so deals / MQLs per month is NOT a conversion rate. "
                      "June 2017 is partial (data starts 2017-06-14). Funnel not restricted to Olist reporting months; wins run to 2018-11-14.")
-PARTIAL_FUNNEL_CONV = ("Partial: wins are recorded only from Dec 2017, so 2017 cohorts look low because of how deals were recorded, not performance. "
-                       "Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018)")
+PARTIAL_FUNNEL_CONV = ("Partial. Grey = incomplete deal window (Jun-Nov 2017 cohorts start before wins were recorded in Dec 2017, so they look low because of how deals were recorded, not performance). "
+                       "Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018). Teal = complete and mature")
 FUNNEL_SCOPE = "Separate Olist marketing-funnel dataset (8,000 MQLs, 842 closed deals); not blended with order KPIs. Targets to be set by owner"
 
 
@@ -1523,7 +1541,8 @@ mf.add("trend", "lineChart", (24, CONTENT_Y, 616, 236),
        "MQLs and closed deals by month", subtitle=FUNNEL_TREND_NOTE, sort=("c", "Date", "Year Month", "Ascending"))
 mf.add("cohort", "clusteredColumnChart", (652, CONTENT_Y, 604, 236),
        {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "Lead-to-Deal Conversion %")],
-        "Tooltips": [("m", M, "MQLs"), ("m", M, "Converted Leads in Cohort"), ("m", M, "Cohort Is Mature", "Cohort mature (1 = yes)")]},
+        "Tooltips": [("m", M, "MQLs"), ("m", M, "Converted Leads in Cohort"), ("m", M, "Cohort Is Mature", "Cohort mature (1 = yes)"),
+                     ("m", M, "Deal Window Complete", "Deal window complete (1 = yes)")]},
        "Lead-to-deal conversion % by first-contact cohort", subtitle=PARTIAL_FUNNEL_CONV,
        sort=("c", "Date", "Year Month", "Ascending"), objects=MATURITY_FILL)
 mf.add("origin", "tableEx", (24, 460, 400, 248),

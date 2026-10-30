@@ -816,8 +816,28 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
 
-	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature.
-	measure 'Cohort Maturity Colour' = IF ( [Cohort Is Mature] == 0, "#B45309", "#0E7490" )
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (formatting): 1 = deal window complete, 0 = cohort starts before the first won month (2017-12; earlier wins not recorded, left-censored: 2017-06..2017-11). Same rule as mart_funnel_monthly.is_deal_window_complete (first_contact_month >= first won month), derived from lead rows. Per cohort month only; BLANK unless exactly one Date[Year Month] is in context.
+	measure 'Deal Window Complete' =
+			VAR _firstWon = CALCULATE ( MIN ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )
+			VAR _firstWonMonth = DATE ( YEAR ( _firstWon ), MONTH ( _firstWon ), 1 )
+			VAR _cohort = MAX ( 'Lead'[First Contact Date] )
+			VAR _cohortMonth = DATE ( YEAR ( _cohort ), MONTH ( _cohort ), 1 )
+			RETURN
+				IF ( NOT HASONEVALUE ( 'Date'[Year Month] ) || ISBLANK ( _cohort ), BLANK (), IF ( _cohortMonth >= _firstWonMonth, 1, 0 ) )
+		formatString: 0
+		displayFolder: Marketing Funnel
+		lineageTag: b4dbb740-6dcb-55f3-b08c-282529473b14
+
+		annotation KPI_Id = KPI_FUNNEL_CONVERSION_RATE
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
+
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Hidden formatting helper: grey #6B7280 = incomplete deal window (2017-06..2017-11, wins not recorded), amber #B45309 = immature cohort (Apr-May 2018), accent #0E7490 = complete and mature.
+	measure 'Cohort Maturity Colour' = IF ( [Deal Window Complete] == 0, "#6B7280", IF ( [Cohort Is Mature] == 0, "#B45309", "#0E7490" ) )
 		isHidden
 		displayFolder: Marketing Funnel
 		lineageTag: b3e8a923-a5cc-5435-8655-3f6b9b46100e
@@ -1051,7 +1071,7 @@ table _Measures
 		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
 
 	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): selected model's test sMAPE (drives the dynamic backtest verdict).
-	measure 'Backtest Test sMAPE (Model)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Is Selected Model] = TRUE () )
+	measure 'Backtest Test sMAPE (Model)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Model Role] IN { "selected", "selected baseline" } )
 		formatString: 0.00%
 		displayFolder: Forecast & Anomalies
 		lineageTag: f0626175-7cd2-50f1-a374-72bb0dfa37fc
@@ -1064,8 +1084,8 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
-	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): naive baseline's test sMAPE (drives the dynamic backtest verdict).
-	measure 'Backtest Test sMAPE (Baseline)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Is Selected Model] = FALSE () )
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): test sMAPE of the baseline model named in mart_gmv_forecast.baseline_model (naive_last_value), keyed on Model Role, not on 'not selected'.
+	measure 'Backtest Test sMAPE (Baseline)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Model Role] IN { "baseline", "selected baseline" } )
 		formatString: 0.00%
 		displayFolder: Forecast & Anomalies
 		lineageTag: 0415bcf4-7c02-5fc4-9256-eb7b6011ae67
@@ -1082,8 +1102,12 @@ table _Measures
 	measure 'Backtest Test Verdict' =
 			VAR _m = [Backtest Test sMAPE (Model)]
 			VAR _b = [Backtest Test sMAPE (Baseline)]
+			VAR _baseSelected = CALCULATE ( COUNTROWS ( 'GMV Forecast Backtest' ), REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Model Role] = "selected baseline" ) > 0
+			VAR _baseName = CALCULATE ( MAX ( 'GMV Forecast Backtest'[Model] ), REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Model Role] IN { "baseline", "selected baseline" } )
 			RETURN
-				IF (
+				SWITCH ( TRUE (),
+					_baseSelected,
+					"Baseline (" & _baseName & ") was selected; no separate model to compare on the test period (test sMAPE " & FORMAT ( _b, "0.00%" ) & ")",
 					ISBLANK ( _m ) || ISBLANK ( _b ), BLANK (),
 					"Model " & IF ( _m < _b, "beats", "does not beat" ) & " the naive baseline on the test period (test sMAPE "
 						& FORMAT ( _m, "0.00%" ) & " vs " & FORMAT ( _b, "0.00%" ) & ")"
