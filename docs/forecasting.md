@@ -34,8 +34,8 @@ Python writes one run per execution (history kept) to `analytics.forecast_runs`,
 
 | Table | Grain | Key columns |
 |---|---|---|
-| `marts.mart_gmv_forecast` | forecast_month | split, training_cutoff, horizon, model, actual_gmv, forecast_gmv, lower_gmv, upper_gmv, baseline_gmv (+ baseline PI), orders_model, actual/forecast/lower/upper/baseline_orders, interval_level, is_anomaly, is_orders_anomaly, is_forecast, run_id, generated_at |
-| `marts.mart_gmv_anomalies` | anomaly_date (month start) | gmv, expected_gmv, gmv_residual, gmv_robust_z, is_gmv_anomaly, orders, expected_orders, orders_robust_z, is_orders_anomaly, is_anomaly, z_threshold, model, run_id |
+| `marts.mart_gmv_forecast` | forecast_month | split, training_cutoff, horizon, model, selected_model, selection_reason, actual_gmv, fitted_gmv (train rows only), forecast_gmv (null on train rows), lower_gmv, upper_gmv, baseline_gmv (+ baseline PI), orders_model, actual/fitted/forecast/lower/upper/baseline_orders, interval_level, interval_method (null on train rows, which carry no interval), is_gmv_anomaly, is_orders_anomaly, is_forecast, run_id, generated_at |
+| `marts.mart_gmv_anomalies` | anomaly_date (month start) | gmv, expected_gmv, gmv_residual, gmv_robust_z, is_gmv_anomaly, orders, expected_orders, orders_robust_z, is_orders_anomaly, is_any_anomaly (GMV OR orders), z_threshold, model, run_id |
 | `marts.mart_gmv_forecast_backtest` | series × model × split | n_months, mae, smape_pct, mape_pct, is_selected_model |
 
 ## Results on the real data (latest run, 2026-10-31 IST)
@@ -48,6 +48,8 @@ Python writes one run per execution (history kept) to `analytics.forecast_runs`,
   growth phase, but **loses to the naive baseline on the 2018-06..08 test** because GMV/orders plateaued from
   mid-2018. This is reported, not tuned away; KPI & Quality's warn test `assert_forecast_model_beats_baseline`
   flags it. Use the baseline columns next to the model.
+* For **orders** the model also loses on the 2018-03..05 validation window (sMAPE 14.56% vs naive 4.05%), so the
+  orders forecast should be read as indicative only; the naive baseline is the better reference for orders.
 * Conformal 95% intervals now contain all 3 test actuals for both series (the earlier analytic ETS intervals
   missed all 3).
 * GMV forecast 2018-09..2019-02: R$0.94 M → R$1.03 M/month (95% ≈ R$0.62–1.26 M at h=1, widening to
