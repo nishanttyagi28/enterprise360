@@ -38,3 +38,27 @@ Staging applies to every text column: trim + null tokens ('', NA, nan, null, non
 | geolocation.geolocation_zip_code_prefix | zip_prefix | dim_geography.zip_prefix, geography_sk | one row per prefix |
 | geolocation.geolocation_lat / _lng | lat / lng (numeric 9,6), is_within_brazil | dim_geography.lat / lng | median of in-Brazil points |
 | geolocation.geolocation_city / _state | city / state | dim_geography.city / state | mode; fallback customer/seller values |
+
+## Marketing Funnel → core (Kaggle olistbr/marketing-funnel-olist)
+| Source file.column | staging column (type) | core column | Rule |
+|---|---|---|---|
+| mql.mql_id | mql_id | fct_leads.mql_id, lead_sk | BK; sk = hash(mql_id); unique (8,000) |
+| mql.first_contact_date | first_contact_date (date) | fct_leads.first_contact_date, first_contact_date_key, first_contact_month | cohort = month |
+| mql.landing_page_id | landing_page_id | fct_leads.landing_page_id | as-is (495 values) |
+| mql.origin | origin (lower) | dim_lead_origin.origin → fct_leads.origin_sk | null → unknown member 'not_recorded' (60); source 'unknown' kept |
+| deals.mql_id | mql_id | fct_closed_deals.mql_id, deal_sk; fct_leads.is_closed | 1:1 to lead (842, all match) |
+| deals.seller_id | seller_id | fct_closed_deals.seller_id, seller_sk, is_seller_in_olist_orders | seller_sk only if in dim_seller (380/842 = 45.1%) |
+| deals.sdr_id / sr_id | sdr_id / sr_id | fct_closed_deals.sdr_id / sr_id | as-is |
+| deals.won_date | won_date (timestamp) | fct_leads.won_date, won_date_key, days_to_close; fct_closed_deals.won_date, won_month | days_to_close = won_date::date − first_contact_date; < 0 flagged, excluded from stats |
+| deals.business_segment, lead_type, lead_behaviour_profile, average_stock, business_type | lower | fct_closed_deals.* | as-is (sparse) |
+| deals.has_company / has_gtin | boolean | fct_closed_deals.* | 'True'/'False' → bool; else null |
+| deals.declared_product_catalog_size | integer | fct_closed_deals.* | numeric text → int |
+| deals.declared_monthly_revenue | declared_monthly_revenue_brl numeric(18,2) | fct_closed_deals.declared_monthly_revenue_brl | self-declared, descriptive only; never a KPI |
+
+## Forecast (Python) → marts
+| Source | Target | Rule |
+|---|---|---|
+| marts.mart_business_overview_monthly.gmv / orders (complete ∧ reporting months) | analytics.forecast_monthly.actual_gmv / actual_orders | 2017-01..2018-08 |
+| ETS model / naive | forecast_* / baseline_* (+ lower/upper, 95%) | see docs/forecasting.md |
+| residual robust z | analytics.forecast_anomalies.*_robust_z, is_*_anomaly | z > 3.5 |
+| latest successful run | marts.mart_gmv_forecast / mart_gmv_anomalies / mart_gmv_forecast_backtest | int_latest_forecast_run |

@@ -167,6 +167,7 @@ The project uses **real public data only**. Nothing is synthesised for the repor
 | Dataset | Domain | Period | Licence | Link |
 |---|---|---|---|---|
 | Olist Brazilian E-Commerce | Brazilian marketplace, BRL | 2016-09 → 2018-10 | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) (non-commercial) | [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) |
+| Olist Marketing Funnel | Seller acquisition leads → closed deals | MQLs 2017-06 → 2018-05, deals won 2017-12 → 2018-11 | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) (non-commercial) | [Kaggle](https://www.kaggle.com/datasets/olistbr/marketing-funnel-olist) |
 | UCI Online Retail II | UK online retailer, GBP | 2009-12 → 2011-12 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [UCI ML Repository](https://archive.ics.uci.edu/dataset/502/online+retail+ii) |
 
 Provenance, checksums and row-count cross-checks are in [`data/README.md`](data/README.md). The raw files themselves are not committed.
@@ -247,6 +248,9 @@ erDiagram
 | `dim_customer` | `customer_unique_id`, the person (Olist issues a new `customer_id` for every order) |
 
 **Marts:** `mart_sales_daily`, `mart_sales_by_seller_monthly`, `mart_sales_by_category_monthly`, `mart_business_overview_monthly`, `mart_customer_cohorts`, `mart_operations_delivery_performance`.
+**Marketing Funnel** (`core` / `marts`): `dim_lead_origin` (channel; unknown member `not_recorded`), `fct_leads` (one MQL; 1:1 deal outcome, `days_to_close`), `fct_closed_deals` (one deal; `seller_sk` only when the seller exists in `dim_seller`: 380 of 842), `mart_funnel_monthly` (first-contact month × origin cohort; `conversion_rate = converted_leads_in_cohort / mqls`, `is_cohort_mature` at 210 days), `mart_funnel_time_to_close` (days bucket × origin). `declared_monthly_revenue_brl` is self-declared by the seller and is descriptive only.
+**Forecast** (`marts`): `mart_gmv_forecast` (month), `mart_gmv_anomalies` (month), `mart_gmv_forecast_backtest`, written by `python -m analytics.forecast`. Method and limits: [docs/forecasting.md](docs/forecasting.md).
+**MIS export:** `python -m reporting.export_mis` → `reports/enterprise360_mis_YYYYMMDD.xlsx` (one sheet per key mart + README sheet).
 **UCI:** `uci_fct_invoice_lines` (signed line grain; cancellations are negative lines), `uci_fct_invoices`, plus product, customer, country and date dimensions.
 
 ---
@@ -329,7 +333,7 @@ enterprise360/
 ├── data/README.md                # dataset provenance, licences, checksums
 ├── database/ddl/                 # schemas, raw tables, load-audit table
 ├── ingestion/                    # Python package: contracts, validators, COPY loader, audit
-│   ├── sources/                  #   olist.py, uci.py (exact header contracts)
+│   ├── sources/                  #   olist.py, uci.py, funnel.py (exact header contracts)
 │   ├── loaders/                  #   postgres.py, hashing.py, audit.py
 │   └── validators/
 ├── dbt_enterprise360/            # dbt project
@@ -338,6 +342,8 @@ enterprise360/
 │   │   └── uci/                  #   staging, intermediate, core, marts
 │   ├── seeds/ snapshots/ macros/ tests/
 ├── orchestration/                # Prefect flow + dbt runner (loads .env)
+├── analytics/forecasting/        # GMV/orders forecast + anomaly flags (statsmodels ETS)
+├── reporting/                    # export_mis.py → reports/*.xlsx (gitignored)
 ├── governance/kpi_dictionary/    # kpis.yaml → generated docs/kpi-catalog.md
 ├── powerbi/                      # Enterprise360.pbip (TMDL model + PBIR report) + tools
 ├── docs/                         # brief, lineage, source-to-target mapping, KPI catalog
@@ -352,7 +358,7 @@ enterprise360/
 
 ## 🚀 Run It Locally
 
-**Prerequisites:** Windows with PowerShell 5.1+, Python 3.12, PostgreSQL 16 (a local service), and Power BI Desktop (January 2026 or later). Download the datasets as described in [`data/README.md`](data/README.md) into `data\raw\olist` and `data\raw\uci`.
+**Prerequisites:** Windows with PowerShell 5.1+, Python 3.12, PostgreSQL 16 (a local service), and Power BI Desktop (January 2026 or later). Download the datasets as described in [`data/README.md`](data/README.md) into `data\raw\olist`, `data\raw\uci_online_retail_ii` and `data\raw\olist_marketing_funnel`.
 
 ```powershell
 git clone https://github.com/nishanttyagi28/enterprise360.git
@@ -360,27 +366,32 @@ cd enterprise360
 Copy-Item .env.example .env                 # set POSTGRES_PASSWORD for the e360_app role
 
 .\scripts\setup.ps1 -CreateTestDatabase     # venv, pip install, DDL, dbt deps, dbt debug
-.\scripts\run.ps1 -Test                     # ingest Olist + UCI → dbt freshness + build → pytest, ruff, mypy
+.\scripts\run.ps1 -Test                     # ingest Olist + UCI + Funnel → dbt freshness + build → forecast → pytest, ruff, mypy
+.\scripts\run.ps1 -Export                   # ... and write reports\enterprise360_mis_YYYYMMDD.xlsx
 .\scripts\run.ps1 -Prefect                  # the same pipeline as a Prefect flow
 ```
 
-Useful options: `-Domain olist|uci|all`, `-SourceDir <dir>`, `-UciSourceDir <dir>`, `-Force` (reload unchanged files), `-FullRefresh`, and `-CreateDatabase` on `setup.ps1`. If scripts are blocked, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+Useful options: `-Domain olist|uci|funnel|all`, `-SourceDir <dir>`, `-UciSourceDir <dir>`, `-FunnelSourceDir <dir>`, `-SkipForecast`, `-Export`, `-Force` (reload unchanged files), `-FullRefresh`, and `-CreateDatabase` on `setup.ps1`. If scripts are blocked, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 <details>
 <summary><b>Linux / macOS (Makefile) and plain <code>python -m</code> entry points</b></summary>
 
 ```bash
 make setup          # venv + pip install -e ".[dev]"
-make ingest         # init-db, then Olist + UCI (unchanged files are skipped)
+make ingest         # init-db, then Olist + UCI + Funnel (unchanged files are skipped)
 make dbt-build      # dbt deps, source freshness, build
 make test lint typecheck
 make flow           # Prefect flow
+make forecast export
 ```
 
 ```bash
 python -m ingestion init-db
 python -m ingestion olist [--source-dir DIR] [--force]
 python -m ingestion uci   [--source-dir DIR] [--force]
+python -m ingestion funnel [--source-dir DIR] [--force]
+python -m analytics.forecast [--horizon 3..6] [--no-dbt]
+python -m reporting.export_mis [--output PATH]
 python -m orchestration.dbt_runner build
 python -m orchestration.flow
 ```
@@ -415,6 +426,9 @@ More detail: [project brief](docs/00-project-brief.md) · [data lineage](docs/da
 
 - [x] Olist ingestion, star schema, marts, DQ logging
 - [x] UCI Online Retail II as an independent second domain
+- [x] Olist Marketing Funnel (lead cohorts, time to close)
+- [x] Monthly GMV/orders forecast with baseline backtest and anomaly flags
+- [x] Excel MIS export
 - [x] Power BI PBIP report with drill-through and tooltip pages
 - [x] CI: lint, type-check, dbt build and tests on fixtures
 - [ ] Publish to the Power BI Service with scheduled refresh

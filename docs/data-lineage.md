@@ -73,3 +73,28 @@ flowchart LR
   DS --> REC[core.dq_reconciliation]; FL --> REC; MS --> REC; MP --> REC
   classDef f fill:#1b2a41,color:#cfe8ff
 ```
+
+## Olist Marketing Funnel (joins Olist only via seller_id → dim_seller, left join, no fan-out)
+```mermaid
+flowchart LR
+  F1[olist_marketing_qualified_leads_dataset.csv]:::f --> RM[raw.olist_marketing_qualified_leads] --> SM[stg_olist__marketing_qualified_leads]
+  F2[olist_closed_deals_dataset.csv]:::f --> RD[raw.olist_closed_deals] --> SD[stg_olist__closed_deals]
+  SM --> DO[dim_lead_origin]
+  SM --> FL[fct_leads]; DO --> FL; SD --> FL
+  SD --> FD[fct_closed_deals]; FL --> FD; DS[dim_seller] -. seller_id match only .-> FD
+  FL --> MF[mart_funnel_monthly]; FD --> MF
+  FL --> MT[mart_funnel_time_to_close]
+  classDef f fill:#1b2a41,color:#cfe8ff
+```
+
+## Forecast and MIS export (Python after dbt build)
+```mermaid
+flowchart LR
+  BO[marts.mart_business_overview_monthly<br/>is_complete_month AND is_reporting_month] --> PY[python -m analytics.forecast]
+  PY --> AR[analytics.forecast_runs] & AM[analytics.forecast_monthly] & AA[analytics.forecast_anomalies] & AB[analytics.forecast_backtest]
+  AR --> LR[int_latest_forecast_run]
+  AM --> GF[marts.mart_gmv_forecast]; LR --> GF; AA --> GF
+  AA --> GA[marts.mart_gmv_anomalies]; LR --> GA
+  AB --> GB[marts.mart_gmv_forecast_backtest]; LR --> GB
+  GF & GA & GB & BO --> X[python -m reporting.export_mis<br/>reports/enterprise360_mis_YYYYMMDD.xlsx]
+```
