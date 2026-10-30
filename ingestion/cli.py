@@ -1,4 +1,4 @@
-"""CLI: ``python -m ingestion init-db | olist [...] | uci [--source-dir DIR] [--force]``."""
+"""CLI: ``python -m ingestion init-db | olist [...] | uci | funnel [--source-dir DIR] [--force]``."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import typer
 
 from ingestion.config import get_settings
 from ingestion.log_config import configure_logging
-from ingestion.pipeline import apply_ddl, connect, run_olist, run_uci
+from ingestion.pipeline import apply_ddl, connect, run_funnel, run_olist, run_uci
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -44,6 +44,15 @@ def uci(
 ) -> None:
     """Load the two UCI Online Retail II CSVs into raw.uci_online_retail_ii_lines."""
     run_uci(get_settings(), source_dir=source_dir, force=force)
+
+
+@app.command("funnel")
+def funnel(
+    source_dir: Annotated[Path | None, typer.Option(help="Folder with the 2 Marketing Funnel CSVs")] = None,
+    force: Annotated[bool, typer.Option(help="Reload even if file hash unchanged")] = False,
+) -> None:
+    """Load the Olist Marketing Funnel CSVs (MQLs + closed deals) into raw.*."""
+    run_funnel(get_settings(), source_dir=source_dir, force=force)
 
 
 if __name__ == "__main__":

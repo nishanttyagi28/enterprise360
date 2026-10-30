@@ -1,0 +1,32 @@
+version: 2
+models:
+  - name: stg_olist__marketing_qualified_leads
+    description: Typed MQLs, one row per mql_id.
+    columns:
+      - name: mql_id
+        tests: [unique, not_null]
+      - name: first_contact_date
+        tests: [not_null]
+      - name: origin
+        description: Lower-cased acquisition channel; null when not recorded (60 leads). 'unknown' is a source value.
+  - name: stg_olist__closed_deals
+    description: Typed closed deals, one row per mql_id.
+    columns:
+      - name: mql_id
+        tests:
+          - unique
+          - not_null
+          - relationships: {to: "ref('stg_olist__marketing_qualified_leads')", field: mql_id}
+      - name: won_date
+        description: Deal won timestamp (source won_date, typed timestamp).
+        tests: [not_null]
+      - name: declared_monthly_revenue_brl
+        description: Seller-declared expected monthly sales at signup (BRL, self-reported; 0 for most). Not Olist GMV.
+      - name: lead_type
+        tests:
+          - accepted_values:
+              values: [online_medium, online_big, industry, offline, online_small, online_beginner, online_top, other]
+              config: {severity: warn}
+      - name: business_type
+        tests:
+          - accepted_values: {values: [reseller, manufacturer, other], config: {severity: warn}}

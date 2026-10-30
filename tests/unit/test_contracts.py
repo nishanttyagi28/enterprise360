@@ -10,6 +10,7 @@ import pytest
 from ingestion.exceptions import ContractViolationError, SourceFileMissingError
 from ingestion.extractors import describe_file, read_header
 from ingestion.sources import (
+    FUNNEL_CONTRACTS,
     OLIST_CONTRACTS,
     UCI_ONLINE_RETAIL_II,
     ReplaceScope,
@@ -68,10 +69,13 @@ def test_contract_rejects_bad_natural_key() -> None:
 
 DDL_FILES = {c.name: "010_raw_olist.sql" for c in OLIST_CONTRACTS} | {
     UCI_ONLINE_RETAIL_II.name: "020_raw_uci.sql"
-}
+} | {c.name: "030_raw_funnel.sql" for c in FUNNEL_CONTRACTS}
 
 
-@pytest.mark.parametrize("contract", [*OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II], ids=lambda c: c.name)
+ALL_CONTRACTS = [*OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II, *FUNNEL_CONTRACTS]
+
+
+@pytest.mark.parametrize("contract", ALL_CONTRACTS, ids=lambda c: c.name)
 def test_raw_ddl_in_sync_with_contracts(contract: SourceContract) -> None:
     ddl = (ROOT / "database" / "ddl" / DDL_FILES[contract.name]).read_text(encoding="utf-8")
     block = re.search(rf"create table if not exists raw\.{contract.table} \((.*?)\n\);", ddl, re.S)
@@ -110,3 +114,18 @@ def test_multi_file_contract_requires_file_scope() -> None:
             columns=("a",),
             natural_key=("a",),
         )
+
+
+@pytest.mark.parametrize("contract", FUNNEL_CONTRACTS, ids=lambda c: c.name)
+def test_funnel_fixture_headers_match_contract(contract: SourceContract) -> None:
+    header, has_bom = read_header(ROOT / "tests" / "fixtures" / "funnel" / contract.file_name)
+    validate_header(contract, header)
+    assert not has_bom
+
+
+def test_funnel_contracts_are_table_snapshots_keyed_by_mql() -> None:
+    assert [c.table for c in FUNNEL_CONTRACTS] == ["olist_marketing_qualified_leads", "olist_closed_deals"]
+    for c in FUNNEL_CONTRACTS:
+        assert c.replace_scope is ReplaceScope.TABLE
+        assert c.natural_key == ("mql_id",)
+    assert len(FUNNEL_CONTRACTS[1].columns) == 14

@@ -1,4 +1,4 @@
-"""Prefect flow: init-db -> ingest Olist + ingest UCI (independent tasks) -> dbt deps/freshness/build.
+"""Prefect flow: init-db -> ingest Olist / UCI / Funnel (independent tasks) -> dbt deps/freshness/build.
 
 The two ingest tasks are independent: a UCI failure is logged and does not stop Olist ingestion (or vice
 versa). One ``dbt build`` then runs over whatever loaded; the flow is marked failed at the end if any
@@ -17,12 +17,16 @@ from prefect import flow, get_run_logger, task
 from ingestion.config import Settings, get_settings
 from ingestion.loaders import LoadResult, LoadStatus
 from ingestion.log_config import configure_logging
-from ingestion.pipeline import apply_ddl, connect, run_olist, run_uci
+from ingestion.pipeline import apply_ddl, connect, run_funnel, run_olist, run_uci
 from orchestration.dbt_runner import run_dbt
 from orchestration.env import load_env
 
-Domain = Literal["olist", "uci", "all"]
-_RUNNERS: dict[str, Callable[..., Sequence[LoadResult]]] = {"olist": run_olist, "uci": run_uci}
+Domain = Literal["olist", "uci", "funnel", "all"]
+_RUNNERS: dict[str, Callable[..., Sequence[LoadResult]]] = {
+    "olist": run_olist,
+    "uci": run_uci,
+    "funnel": run_funnel,
+}
 
 
 @task(retries=2, retry_delay_seconds=30)
@@ -61,14 +65,15 @@ def olist_pipeline(
     full_refresh: bool = False,
     domain: Domain = "all",
     uci_source_dir: Path | None = None,
+    funnel_source_dir: Path | None = None,
 ) -> dict[str, dict[str, int] | str]:
-    """``source_dir`` overrides the Olist folder, ``uci_source_dir`` the UCI folder."""
+    """Folder overrides: ``source_dir`` (Olist), ``uci_source_dir``, ``funnel_source_dir``."""
     load_env()
     configure_logging(get_settings().log_level)
     logger = get_run_logger()
     init_db_task()
-    domains = ["olist", "uci"] if domain == "all" else [domain]
-    dirs = {"olist": source_dir, "uci": uci_source_dir}
+    domains = ["olist", "uci", "funnel"] if domain == "all" else [domain]
+    dirs = {"olist": source_dir, "uci": uci_source_dir, "funnel": funnel_source_dir}
     # submit both, then wait: independent, so one failing cannot block the other
     futures = {d: ingest_task.submit(d, dirs[d], force) for d in domains}
     outcome: dict[str, dict[str, int] | str] = {}

@@ -45,3 +45,15 @@ models:
       - name: geography_sk
         tests:
           - relationships: {to: "ref('dim_geography')", field: geography_sk}
+  - name: dim_lead_origin
+    description: Lead acquisition channel (Marketing Funnel). Unknown member 'not_recorded' = null origin in source.
+    columns:
+      - name: origin_sk
+        tests: [unique, not_null]
+      - name: origin
+        tests:
+          - unique
+          - not_null
+          - accepted_values:
+              values: [organic_search, paid_search, social, unknown, direct_traffic, email, referral, other, display, other_publicities, not_recorded]
+              config: {severity: warn}

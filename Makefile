@@ -3,8 +3,9 @@ PY      ?= .venv/bin/python
 DBT      = $(PY) -m orchestration.dbt_runner
 OLIST_DIR ?=
 UCI_DIR   ?=
+FUNNEL_DIR ?=
 
-.PHONY: setup db-up db-init ingest ingest-olist ingest-uci ingest-fixtures dbt-deps dbt-build dbt-docs test test-unit lint typecheck flow clean
+.PHONY: setup db-up db-init ingest ingest-olist ingest-uci ingest-funnel ingest-fixtures dbt-deps dbt-build dbt-docs test test-unit lint typecheck flow clean
 
 setup:            ## create venv + install project with dev extras
 	python3.12 -m venv .venv
@@ -18,7 +19,7 @@ db-up:            ## OPTIONAL container DB (target runtime uses a native PG16 se
 db-init:          ## schemas + raw tables + audit table (idempotent)
 	$(PY) -m ingestion init-db
 
-ingest: ingest-olist ingest-uci   ## load Olist + UCI CSVs (unchanged files are skipped)
+ingest: ingest-olist ingest-uci ingest-funnel   ## load Olist + UCI + Funnel CSVs (unchanged files are skipped)
 
 ingest-olist: db-init
 	$(PY) -m ingestion olist $(if $(OLIST_DIR),--source-dir $(OLIST_DIR),)
@@ -26,9 +27,13 @@ ingest-olist: db-init
 ingest-uci: db-init
 	$(PY) -m ingestion uci $(if $(UCI_DIR),--source-dir $(UCI_DIR),)
 
+ingest-funnel: db-init
+	$(PY) -m ingestion funnel $(if $(FUNNEL_DIR),--source-dir $(FUNNEL_DIR),)
+
 ingest-fixtures: db-init
 	$(PY) -m ingestion olist --source-dir tests/fixtures/olist
 	$(PY) -m ingestion uci --source-dir tests/fixtures/uci
+	$(PY) -m ingestion funnel --source-dir tests/fixtures/funnel
 
 dbt-deps:
 	$(DBT) deps
@@ -53,7 +58,7 @@ lint:
 typecheck:
 	$(PY) -m mypy
 
-flow:             ## Prefect flow: init-db -> ingest olist + uci (independent) -> dbt deps/freshness/build
+flow:             ## Prefect flow: init-db -> ingest olist + uci + funnel (independent) -> dbt deps/freshness/build
 	$(PY) -m orchestration.flow
 
 clean:

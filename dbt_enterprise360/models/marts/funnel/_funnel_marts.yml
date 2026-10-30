@@ -1,0 +1,36 @@
+version: 2
+models:
+  - name: mart_funnel_monthly
+    description: >-
+      Lead cohorts by first-contact month x origin. Deals are attributed to the lead's first-contact month.
+      conversion_rate = converted_leads_in_cohort / mqls (non-additive: roll up as a ratio of sums).
+      median_days_to_close is display-only per row; avg = sum_days_to_close / deals_with_valid_duration.
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [month_start, origin_sk]}
+    columns:
+      - name: origin_sk
+        tests: [not_null, {relationships: {to: "ref('dim_lead_origin')", field: origin_sk}}]
+      - name: month_date_key
+        tests: [not_null, {relationships: {to: "ref('dim_date')", field: date_key}}]
+      - name: mqls
+        tests: [not_null, {dbt_utils.accepted_range: {min_value: 1}}]
+      - name: is_cohort_mature
+        description: (cohort month end + 210 days) <= max(won_date). 210 = locked p95 days to close.
+        tests: [not_null]
+      - name: is_deal_window_complete
+        description: >-
+          Left-censoring flag (different rule from is_cohort_mature): false for cohorts before the first month
+          with any won deal in the source (2017-12), whose conversion is understated.
+        tests: [not_null]
+      - name: conversion_rate
+        tests: [not_null, {dbt_utils.accepted_range: {min_value: 0, max_value: 1}}]
+  - name: mart_funnel_time_to_close
+    description: Closed deals by days-to-close bucket x origin (shares within origin).
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [origin_sk, bucket_order]}
+    columns:
+      - name: origin_sk
+        tests: [not_null, {relationships: {to: "ref('dim_lead_origin')", field: origin_sk}}]
+      - name: bucket
+        tests:
+          - accepted_values: {values: ['negative (anomaly)', '0-7', '8-14', '15-30', '31-60', '61-90', '91-180', '181+']}

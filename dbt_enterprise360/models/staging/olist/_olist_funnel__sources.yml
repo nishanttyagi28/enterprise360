@@ -1,0 +1,23 @@
+version: 2
+sources:
+  - name: olist_funnel
+    description: >-
+      Kaggle olistbr/marketing-funnel-olist (CC BY-NC-SA 4.0), landed verbatim by `python -m ingestion funnel`.
+      Marketing-qualified leads (MQLs, 2017-06..2018-05) and the deals closed from them (won 2017-12..2018-11).
+    schema: raw
+    loaded_at_field: _ingested_at
+    freshness:
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 7, period: day}
+    tables:
+      - name: olist_marketing_qualified_leads
+        columns:
+          - name: mql_id
+            tests: [not_null, unique]
+      - name: olist_closed_deals
+        columns:
+          - name: mql_id
+            tests:
+              - not_null
+              - unique
+              - relationships: {to: "source('olist_funnel', 'olist_marketing_qualified_leads')", field: mql_id}

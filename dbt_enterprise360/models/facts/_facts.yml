@@ -97,3 +97,37 @@ models:
       - name: review_score
         tests:
           - accepted_values: {values: [1, 2, 3, 4, 5], quote: false}
+  - name: fct_leads
+    description: One row per marketing-qualified lead (mql_id), with its 1:1 closed-deal outcome. Cohort = first_contact_month.
+    columns:
+      - name: lead_sk
+        tests: [unique, not_null]
+      - name: mql_id
+        tests: [unique, not_null]
+      - name: origin_sk
+        tests: [not_null, {relationships: {to: "ref('dim_lead_origin')", field: origin_sk}}]
+      - name: first_contact_date_key
+        tests: [not_null, {relationships: {to: "ref('dim_date')", field: date_key}}]
+      - name: won_date_key
+        tests: [{relationships: {to: "ref('dim_date')", field: date_key}}]
+      - name: is_closed
+        tests: [not_null]
+      - name: days_to_close
+        description: won date - first contact date (days); null if not closed. Negative = source anomaly.
+  - name: fct_closed_deals
+    description: >-
+      One row per closed deal (mql_id). seller_sk only when the seller_id exists in dim_seller
+      (is_seller_in_olist_orders); otherwise null - never a forced or fuzzy match.
+    columns:
+      - name: deal_sk
+        tests: [unique, not_null]
+      - name: mql_id
+        tests: [unique, not_null, {relationships: {to: "ref('fct_leads')", field: mql_id}}]
+      - name: lead_sk
+        tests: [not_null, {relationships: {to: "ref('fct_leads')", field: lead_sk}}]
+      - name: seller_sk
+        tests: [{relationships: {to: "ref('dim_seller')", field: seller_sk}}]
+      - name: won_date_key
+        tests: [not_null, {relationships: {to: "ref('dim_date')", field: date_key}}]
+      - name: declared_monthly_revenue_brl
+        description: Seller-declared expected monthly sales at signup (self-reported BRL; mostly 0). Not GMV.

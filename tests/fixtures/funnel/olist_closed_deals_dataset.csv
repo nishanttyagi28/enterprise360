@@ -1,0 +1,4 @@
+mql_id,seller_id,sdr_id,sr_id,won_date,business_segment,lead_type,lead_behaviour_profile,has_company,has_gtin,average_stock,business_type,declared_product_catalog_size,declared_monthly_revenue
+m0000000000000000000000000000001,s0000000000000000000000000000001,sdr1,sr1,2018-01-20 10:00:00,pet,online_medium,cat,,,,reseller,,0.0
+m0000000000000000000000000000003,s0000000000000000000000000000099,sdr1,sr2,2018-02-02 09:30:00,home_decor,industry,,True,False,5-20,manufacturer,100.0,50000.0
+m0000000000000000000000000000006,s0000000000000000000000000000098,sdr2,sr2,2018-03-19 12:00:00,toys,offline,"cat, wolf",,,,reseller,,0.0

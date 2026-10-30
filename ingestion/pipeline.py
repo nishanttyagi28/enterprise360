@@ -21,6 +21,7 @@ from ingestion.loaders.audit import LoadAuditRepository, LoadResult, LoadStatus
 from ingestion.loaders.postgres import PostgresLoader
 from ingestion.log_config import get_logger
 from ingestion.sources.contracts import SourceContract
+from ingestion.sources.funnel import FUNNEL_CONTRACTS
 from ingestion.sources.olist import OLIST_CONTRACTS
 from ingestion.sources.uci import UCI_CONTRACTS
 from ingestion.validators.contract import validate_header
@@ -155,6 +156,21 @@ def run_uci(settings: Settings, *, source_dir: Path | None = None, force: bool =
             )
         ]
     _log_summary("uci_ingest_finished", results)
+    return results
+
+
+def run_funnel(
+    settings: Settings, *, source_dir: Path | None = None, force: bool = False
+) -> list[LoadResult]:
+    """Load the 2 Marketing Funnel CSVs (full snapshots) into raw.olist_marketing_*/closed_deals."""
+    directory = settings.resolve(source_dir or settings.funnel_dir)
+    log.info("funnel_ingest_started", source_dir=str(directory), force=force)
+    with connect(settings) as conn:
+        results = [
+            load_source(conn, c, directory, force=force, chunk_bytes=settings.copy_chunk_bytes)
+            for c in FUNNEL_CONTRACTS
+        ]
+    _log_summary("funnel_ingest_finished", results)
     return results
 
 

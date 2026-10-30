@@ -15,13 +15,22 @@ import pytest
 
 from ingestion.config import Settings
 from ingestion.loaders import LoadStatus, row_hash
-from ingestion.pipeline import apply_ddl, connect, load_contract_files, load_file, load_source, run_olist
-from ingestion.sources import OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II, get_contract
+from ingestion.pipeline import (
+    apply_ddl,
+    connect,
+    load_contract_files,
+    load_file,
+    load_source,
+    run_funnel,
+    run_olist,
+)
+from ingestion.sources import FUNNEL_CONTRACTS, OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II, get_contract
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "olist"
 UCI_FIXTURES = ROOT / "tests" / "fixtures" / "uci"
+FUNNEL_FIXTURES = ROOT / "tests" / "fixtures" / "funnel"
 
 
 # These tests REPLACE raw tables with fixtures, so they run against a dedicated test database
@@ -129,3 +138,20 @@ def test_uci_files_load_independently_with_line_numbers(conn: psycopg.Connection
     )
     assert counts == {contract.file_names[0]: 6, contract.file_names[1]: 6}
     load_file(conn, contract, UCI_FIXTURES / contract.file_names[1], force=True)
+
+
+def test_funnel_load_is_idempotent_and_skips_unchanged(settings: Settings, conn: psycopg.Connection) -> None:
+    first = run_funnel(settings, source_dir=FUNNEL_FIXTURES, force=True)
+    assert [r.status for r in first] == [LoadStatus.SUCCESS, LoadStatus.SUCCESS]
+    assert [r.rows_loaded for r in first] == [6, 3]
+    again = run_funnel(settings, source_dir=FUNNEL_FIXTURES)
+    assert [r.status for r in again] == [LoadStatus.SKIPPED, LoadStatus.SKIPPED]
+    forced = run_funnel(settings, source_dir=FUNNEL_FIXTURES, force=True)  # full replace, no duplication
+    assert [r.rows_loaded for r in forced] == [6, 3]
+    assert [_count(conn, c.qualified_table) for c in FUNNEL_CONTRACTS] == [6, 3]
+    row = conn.execute(
+        "select origin, (select lead_behaviour_profile from raw.olist_closed_deals "
+        "where mql_id = 'm0000000000000000000000000000006') "
+        "from raw.olist_marketing_qualified_leads where mql_id = 'm0000000000000000000000000000003'"
+    ).fetchone()
+    assert row == (None, "cat, wolf")  # empty origin -> NULL; quoted comma kept
