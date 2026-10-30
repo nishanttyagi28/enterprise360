@@ -204,7 +204,7 @@ There is no Seller link, so funnel figures are never blended with order KPIs. Th
 | Cohort Maturity Colour (hidden formatting helper) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | #B45309 immature, #0E7490 mature |
 | Median Days to Close | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 14 (841 valid deals) |
 | Negative Duration Deals (dq_exclusion) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 1 |
-| Closed Deals by Days-to-Close Bucket (breakdown) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | from the mart. **Not yet listed in kpis.yaml — needs KPI & Quality approval.** |
+| Closed Deals by Days-to-Close Bucket (breakdown; approved by KPI & Quality) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 841 (mart total 842 minus the 1 negative-duration deal, excluded in M with bucket_min_days >= 0). All dates: the mart has no date grain; the Date slicer interaction is set to NoFilter |
 
 **How the measures work:**
 - **Conversion** is cohorted by first-contact month: `DIVIDE([Converted Leads in Cohort], [MQLs])`. It is never deals-in-month divided by MQLs-in-month, and never an average of monthly rates.
@@ -234,7 +234,7 @@ There is no Seller link, so funnel figures are never blended with order KPIs. Th
 - MQLs and closed deals trend. Its subtitle explains the two time axes and the partial June 2017.
 - Cohort conversion column chart. Bars are coloured by maturity (amber #B45309 = immature), with the caveat that wins only start in Dec 2017, so 2017 cohorts look low.
 - Origin table, plus closed deals by business segment and by lead type.
-- Time-to-close distribution, from the mart (all dates).
+- Time-to-close distribution, from the mart (All dates; date slicers do not apply; buckets total 841).
 
 No targets are shown (they are to be set by the owner). The Olist reporting-month trend filter is **not** applied here: the funnel spans 2017-06 to 2018-11, and deals in Sep–Nov 2018 would be dropped.
 

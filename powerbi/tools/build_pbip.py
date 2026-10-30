@@ -324,9 +324,12 @@ FUNNEL_TABLES: list[dict] = [
      "cols": [
          ("origin_sk", "origin_sk", "string", KEY),
          ("Bucket Order", "bucket_order", "int64", {"hidden": True, "summarize": "none"}),
+         ("bucket_min_days", "bucket_min_days", "int64", {"hidden": True, "summarize": "none"}),
          ("Days-to-Close Bucket", "bucket", "string", {"summarize": "none", "sortby": "Bucket Order"}),
          ("deals", "deals", "int64", {"hidden": True, "summarize": "none"}),
-     ]},
+     ],
+     # negative-duration anomaly bucket excluded so buckets total the 841 valid deals behind [Median Days to Close]
+     "steps": ["NonNegative = Table.SelectRows(Selected, each [bucket_min_days] >= 0)"]},
 ]
 TABLES.extend(FUNNEL_TABLES)
 
@@ -802,7 +805,7 @@ FUNNEL_MEASURES = [
      "Supporting measure (dq_exclusion): deals with won_date before first_contact_date (1), excluded from Median Days to Close."),
     (FF, "Closed Deals by Days-to-Close Bucket", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", INT,
      ["SUM ( 'Funnel Time to Close'[deals] )"],
-     "Supporting measure (breakdown, pending KPI & Quality listing): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close (all dates; includes the 'negative (anomaly)' bucket)."),
+     "Supporting measure (breakdown) under KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (approved by KPI & Quality): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close. All dates (the mart has no date grain; date slicers do not apply). Negative-duration anomaly bucket excluded in M, so buckets total 841 valid deals."),
 ]
 MEASURES.extend(FUNNEL_MEASURES)
 HIDDEN_MEASURES.add("Cohort Maturity Colour")
@@ -911,6 +914,8 @@ def build_measures_table(tname: str = "_Measures", measures: list | None = None,
         if name in SUPPORT_KIND:
             out.append("")
             out.append(f"\t\tannotation KPI_SupportingKind = {SUPPORT_KIND[name]}")
+            out.append("")
+            out.append(f"\t\tannotation KPI_ParentKpi = {kid}")
         out.append("")
     out += ["\tcolumn Value", "\t\tdataType: string", "\t\tisHidden", f"\t\tlineageTag: {gid('col', tname, 'Value')}",
             "\t\tsummarizeBy: none", "\t\tsourceColumn: Value", "", "\t\tannotation SummarizationSetBy = Automatic", "",
@@ -1054,6 +1059,7 @@ class Page:
         self.ptype, self.hidden, self.drill = ptype, hidden, drill
         self.name = page_name(pid)
         self.visuals: list[dict] = []
+        self.interactions: list[tuple] = []  # (source visual name, target visual name, type)
         self.z = 0
 
     def add(self, vname: str, vtype: str, pos: tuple, roles: dict | None = None, title: str | None = None,
@@ -1380,8 +1386,9 @@ mf.add("lead-type", "clusteredBarChart", (728, 460, 252, 248),
        "Closed deals by lead type", sort=("m", M, "Closed Deals by Lead Type", "Descending"))
 mf.add("time-to-close", "clusteredColumnChart", (992, 460, 264, 248),
        {"Category": [("c", "Funnel Time to Close", "Days-to-Close Bucket")], "Y": [("m", M, "Closed Deals by Days-to-Close Bucket")]},
-       "Time to close (days)", subtitle="All dates (mart not date-filtered); includes 1 negative-duration anomaly",
+       "Time to close (days) - All dates", subtitle="All dates: date slicers don't apply (mart has no date grain). Excludes the 1 negative-duration deal; buckets total 841",
        sort=("c", "Funnel Time to Close", "Days-to-Close Bucket", "Ascending"))
+mf.interactions.append((hid(mf.pid, "slicer-date"), hid(mf.pid, "time-to-close"), "NoFilter"))
 PAGES.append(mf)
 # Adding a page (e.g. the forecast/anomaly page next round): build a Page, call header()/cards(), PAGES.append(it).
 # The pageNavigator on every page lists all non-hidden pages in PAGES order automatically.
@@ -1641,6 +1648,8 @@ def build_report() -> None:
                       "name": pg.name, "displayName": pg.display,
                       "displayOption": "ActualSize" if pg.ptype == "Tooltip" else "FitToPage",
                       "height": pg.height, "width": pg.width}
+        if pg.interactions:
+            page["visualInteractions"] = [{"source": a, "target": b, "type": t} for a, b, t in pg.interactions]
         if pg.drill:
             ent, prop = pg.drill
             fname = hid("drillfilter", pg.pid)

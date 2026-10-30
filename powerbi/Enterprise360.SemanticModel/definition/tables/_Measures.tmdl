@@ -48,6 +48,8 @@ table _Measures
 
 		annotation KPI_SupportingKind = breakdown
 
+		annotation KPI_ParentKpi = KPI_NET_GMV
+
 	/// KPI_FREIGHT (SUPPORTED): Freight charged to customers (customer freight, not logistics cost).
 	measure 'Freight Value' = SUM ( 'Order Item'[freight_value] )
 		formatString: R$ #,0
@@ -712,6 +714,8 @@ table _Measures
 
 		annotation KPI_SupportingKind = breakdown
 
+		annotation KPI_ParentKpi = KPI_FUNNEL_MQLS
+
 	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Distinct closed deals dated by won_date (842 overall). Different time axis from MQLs: deals-in-month / MQLs-in-month is NOT a conversion rate.
 	measure 'Closed Deals' = DISTINCTCOUNT ( 'Closed Deal'[MQL ID] )
 		formatString: #,0
@@ -734,6 +738,8 @@ table _Measures
 
 		annotation KPI_SupportingKind = breakdown
 
+		annotation KPI_ParentKpi = KPI_FUNNEL_CLOSED_DEALS
+
 	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Supporting measure (breakdown): closed deals by lead_type (6 null).
 	measure 'Closed Deals by Lead Type' = [Closed Deals]
 		formatString: #,0
@@ -745,6 +751,8 @@ table _Measures
 		annotation KPI_Status = SUPPORTED
 
 		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_FUNNEL_CLOSED_DEALS
 
 	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Supporting measure (dq_exclusion): closed deals whose mql_id is not in fct_leads (0 at 2026-10-31).
 	measure 'Unmatched Closed Deals' =
@@ -764,6 +772,8 @@ table _Measures
 
 		annotation KPI_SupportingKind = dq_exclusion
 
+		annotation KPI_ParentKpi = KPI_FUNNEL_CLOSED_DEALS
+
 	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (breakdown): MQLs in the first-contact cohort that became a closed deal at any later date (attributed to first-contact month, not won month).
 	measure 'Converted Leads in Cohort' = CALCULATE ( DISTINCTCOUNT ( 'Lead'[MQL ID] ), KEEPFILTERS ( 'Lead'[is_closed] = TRUE () ) )
 		formatString: #,0
@@ -775,6 +785,8 @@ table _Measures
 		annotation KPI_Status = PARTIAL
 
 		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
 
 	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Cohort conversion: converted leads in cohort / MQLs in cohort, by first-contact month (ratio of sums; 10.53% overall). Never deals-in-month / MQLs-in-month, never an average of monthly rates. PARTIAL: wins recorded only from 2017-12-05 (2017 cohorts under-observed); Apr-May 2018 cohorts immature (210-day window).
 	measure 'Lead-to-Deal Conversion %' = DIVIDE ( [Converted Leads in Cohort], [MQLs] )
@@ -802,6 +814,8 @@ table _Measures
 
 		annotation KPI_SupportingKind = formatting
 
+		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
+
 	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature.
 	measure 'Cohort Maturity Colour' = IF ( [Cohort Is Mature] = 0, "#B45309", "#0E7490" )
 		isHidden
@@ -813,6 +827,8 @@ table _Measures
 		annotation KPI_Status = PARTIAL
 
 		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
 
 	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Median days from first contact to won date over matched deal rows with non-negative duration (14 over 841 deals). Recomputed from rows at every level; never an average of the mart's median_days_to_close.
 	measure 'Median Days to Close' =
@@ -840,7 +856,9 @@ table _Measures
 
 		annotation KPI_SupportingKind = dq_exclusion
 
-	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Supporting measure (breakdown, pending KPI & Quality listing): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close (all dates; includes the 'negative (anomaly)' bucket).
+		annotation KPI_ParentKpi = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+
+	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Supporting measure (breakdown) under KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (approved by KPI & Quality): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close. All dates (the mart has no date grain; date slicers do not apply). Negative-duration anomaly bucket excluded in M, so buckets total 841 valid deals.
 	measure 'Closed Deals by Days-to-Close Bucket' = SUM ( 'Funnel Time to Close'[deals] )
 		formatString: #,0
 		displayFolder: Marketing Funnel
@@ -851,6 +869,8 @@ table _Measures
 		annotation KPI_Status = SUPPORTED
 
 		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
 
 	column Value
 		dataType: string

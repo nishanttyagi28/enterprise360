@@ -5,6 +5,13 @@
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
+  "visualInteractions": [
+    {
+      "source": "8125faa6d6b45101a58b",
+      "target": "920459912551590a99b3",
+      "type": "NoFilter"
+    }
+  ],
   "objects": {
     "background": [
       {

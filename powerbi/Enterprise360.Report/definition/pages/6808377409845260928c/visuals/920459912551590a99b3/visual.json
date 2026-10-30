@@ -165,7 +165,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Time to close (days)'"
+                  "Value": "'Time to close (days) - All dates'"
                 }
               }
             },
@@ -196,7 +196,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'All dates (mart not date-filtered); includes 1 negative-duration anomaly'"
+                  "Value": "'All dates: date slicers don''t apply (mart has no date grain). Excludes the 1 negative-duration deal; buckets total 841'"
                 }
               }
             },

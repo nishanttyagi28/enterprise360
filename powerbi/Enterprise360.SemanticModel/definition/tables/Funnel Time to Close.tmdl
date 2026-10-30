@@ -20,6 +20,15 @@ table 'Funnel Time to Close'
 
 		annotation SummarizationSetBy = User
 
+	column bucket_min_days
+		dataType: int64
+		isHidden
+		lineageTag: be90b30f-3475-5357-90cb-b4449365bf36
+		summarizeBy: none
+		sourceColumn: bucket_min_days
+
+		annotation SummarizationSetBy = User
+
 	column 'Days-to-Close Bucket'
 		dataType: string
 		lineageTag: 5e51d0d4-fa18-5296-9399-e49cc3d644c0
@@ -44,9 +53,10 @@ table 'Funnel Time to Close'
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchemaMarts, Item = "mart_funnel_time_to_close"]}[Data],
-					Selected = Table.SelectColumns(Data, {"origin_sk", "bucket_order", "bucket", "deals"})
+					Selected = Table.SelectColumns(Data, {"origin_sk", "bucket_order", "bucket_min_days", "bucket", "deals"}),
+					NonNegative = Table.SelectRows(Selected, each [bucket_min_days] >= 0)
 				in
-					Selected
+					NonNegative
 
 	annotation PBI_NavigationStepName = Navigation
 

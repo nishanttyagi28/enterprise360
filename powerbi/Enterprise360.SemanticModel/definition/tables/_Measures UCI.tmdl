@@ -183,6 +183,8 @@ table '_Measures UCI'
 
 		annotation KPI_SupportingKind = dq_exclusion
 
+		annotation KPI_ParentKpi = KPI_UCI_ACTIVE_CUSTOMERS
+
 	/// KPI_UCI_REPEAT_RATE (SUPPORTED): Identified customers with >=2 sales invoices over full coverage (2009-12-01 to 2011-12-09) / identified customers. Not period-sensitive.
 	measure 'UCI Repeat Rate %' =
 			DIVIDE (
