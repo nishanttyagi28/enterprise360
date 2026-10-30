@@ -1,0 +1,69 @@
+/// UCI customer (Customer ID); unknown member -1 = lines without Customer ID (is_identified = false). UCI only.
+table 'UCI Customer'
+	lineageTag: 0060abd3-ba6b-5284-9131-28d92c80bb86
+
+	column uci_customer_sk
+		dataType: string
+		isHidden
+		lineageTag: d0c2c967-dbb5-51a4-af73-ba187ee2e7ad
+		summarizeBy: none
+		sourceColumn: uci_customer_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Customer ID'
+		dataType: int64
+		formatString: 0
+		lineageTag: e2103218-4738-5443-b2a6-2d53c30a01d2
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = User
+
+	column is_identified
+		dataType: boolean
+		isHidden
+		lineageTag: 5493cf1d-1778-5965-9377-139dbf428119
+		summarizeBy: none
+		sourceColumn: is_identified
+
+		annotation SummarizationSetBy = User
+
+	column 'Primary Country'
+		dataType: string
+		lineageTag: 4cfcadf8-83ca-5f4b-b924-ff420c50b7b5
+		summarizeBy: none
+		sourceColumn: primary_country
+
+		annotation SummarizationSetBy = User
+
+	column 'First Purchase Month'
+		dataType: dateTime
+		formatString: yyyy-mm
+		lineageTag: eba83c4e-a16b-561b-b4ee-2c6c65c1213a
+		summarizeBy: none
+		sourceColumn: first_purchase_month
+
+		annotation SummarizationSetBy = User
+
+	column is_repeat_customer
+		dataType: boolean
+		isHidden
+		lineageTag: ad9658e8-efdc-559f-8b8f-b666ccf23cf8
+		summarizeBy: none
+		sourceColumn: is_repeat_customer
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Customer' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_dim_customer"]}[Data],
+					Selected = Table.SelectColumns(Data, {"uci_customer_sk", "customer_id", "is_identified", "primary_country", "first_purchase_month", "is_repeat_customer"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"first_purchase_month", type date}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

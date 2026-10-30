@@ -170,10 +170,113 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - **Seller handover (KPI_SELLER_HANDOVER_OTD, PARTIAL).** `[Seller Handover On-Time %]` = items handed to the carrier (`fct_deliveries.delivered_carrier_at`) at or before the item's `shipping_limit_at` / items with both timestamps. It is a **full timestamp** comparison, now computed in dbt as `core.fct_order_items.is_handover_on_time`. The model loads that source column, and the earlier calculated column was dropped. `shipping_limit_at` is **Olist's seller shipping deadline, not a contractual SLA**. Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time. This caveat appears on every visual that shows the measure: the Operations & Delivery card and the seller-state chart. `[Handover Missing Timestamp]` (DQ exclusion count) is shown on the Data Quality page. Target and benchmark: to be set by owner.
 - dbt surrogate keys are md5 text; `date_key` is an integer yyyymmdd.
 
+## UCI Online Retail II (GBP) — separate domain
+
+A separate UK online-retail dataset (UCI Online Retail II, 2009-12-01 to 2011-12-09, **GBP**). It is **not comparable with Olist (BRL)** and is never joined to it.
+
+**Source parameters:** `PgSchemaUci` (default `uci_core`) and `PgSchemaUciMarts` (default `uci_marts`). They use the same `PgServer` / `PgDatabase` and the same `e360_app` Database credentials. No password is stored.
+
+**Tables.** All are UCI-only, built from the real dbt models in `dbt_enterprise360/models/uci`:
+
+| Table | dbt model | Grain / role |
+|---|---|---|
+| UCI Invoice Line | uci_core.uci_fct_invoice_lines | invoice line (1,033,036 rows); all value measures |
+| UCI Invoice | uci_core.uci_fct_invoices | invoice (C-prefixed = cancellation); invoice and customer counts |
+| UCI Date | uci_core.uci_dim_date | UCI calendar, marked as date table; `is_complete_month`, `is_reporting_month` |
+| UCI Customer | uci_core.uci_dim_customer | Customer ID; -1 = no Customer ID |
+| UCI Product | uci_core.uci_dim_product | stock code |
+| UCI Country | uci_core.uci_dim_country | invoice country |
+| UCI Cohort | uci_marts.uci_mart_customer_cohorts | standalone (no relationships) |
+| UCI RFM | uci_marts.uci_mart_customer_rfm | standalone (no relationships) |
+| _Measures UCI | — | 19 measures, display folder `UCI Retail (GBP)\…`, £ formats |
+
+**Relationships:** 7, all UCI→UCI, single-direction many-to-one:
+- Invoice Line → Product / Customer / Country / Date
+- Invoice → Customer / Country / Date
+
+There are **no relationships between any UCI table and any Olist table**. UCI has its own date, customer, product and country dimensions. The `Time Intelligence` calculation group targets the Olist `Date`, so do not apply it to UCI visuals.
+
+**Measures.** Names, ids and statuses match kpis.yaml v2.0.0 (domain `uci`). Each description carries its KPI id.
+
+| Measure | KPI id | Status |
+|---|---|---|
+| UCI Gross Product Sales (label "Invoiced Value (gross product sales)") | KPI_UCI_GROSS_SALES | SUPPORTED |
+| UCI Product Cancellations | KPI_UCI_PRODUCT_CANCELLATIONS | SUPPORTED |
+| UCI Cancellation Rate % (Value) | KPI_UCI_CANCEL_RATE_VALUE | SUPPORTED |
+| UCI Cancellation Rate % (Lines) | KPI_UCI_CANCEL_RATE_LINES | SUPPORTED |
+| UCI Cancellation Rate % (Invoices) | KPI_UCI_CANCEL_RATE_INVOICES | SUPPORTED |
+| UCI Discounts | KPI_UCI_DISCOUNTS | SUPPORTED |
+| UCI Net Sales (proxy) (label "Net Sales (proxy)") | KPI_UCI_NET_SALES_PROXY | SUPPORTED |
+| UCI Sales Invoices | KPI_UCI_INVOICES | SUPPORTED |
+| UCI AOV | KPI_UCI_AOV | SUPPORTED |
+| UCI Units per Invoice | KPI_UCI_UNITS_PER_INVOICE | SUPPORTED |
+| UCI Postage, UCI Fees | KPI_UCI_POSTAGE_FEES | SUPPORTED |
+| UCI Active Customers | KPI_UCI_ACTIVE_CUSTOMERS | SUPPORTED |
+| UCI New Customers | KPI_UCI_NEW_CUSTOMERS | SUPPORTED |
+| UCI Repeat Rate % | KPI_UCI_REPEAT_RATE | SUPPORTED |
+| UCI Cohort Retention % | KPI_UCI_RETENTION | **PARTIAL** |
+| UCI Customers by RFM Segment | KPI_UCI_RFM_SEGMENT | **PARTIAL** |
+| UCI Product Contribution % | KPI_UCI_PRODUCT_CONTRIBUTION | SUPPORTED |
+| UCI Country Contribution % | KPI_UCI_COUNTRY_CONTRIBUTION | SUPPORTED |
+
+**How the measures work:**
+- **AOV** = `[UCI Net Sales (proxy)] / [UCI Sales Invoices]`, a ratio of sums at every grain. It never averages `aov_gbp`. It does not hold under a UCI Product filter, because its denominator is counted per invoice.
+- **Net Sales (proxy)** = gross product sales + product cancellations + discounts. Postage and fees are excluded. It is an operational proxy, not recognised sales.
+
+**Verified against the warehouse (full coverage):**
+- Net Sales (proxy) £18,914,519.44; Invoiced Value £19,643,861.64.
+- Sales invoices 45,336; **AOV £417.21**.
+- These match the line-level replication of the DAX and `uci_mart_sales_daily`.
+
+**How 2011-12 is handled:** 2011-12 is a partial month (data ends 2011-12-09).
+- **Overall totals and cards include it.** The kpis.yaml validation totals (net 18,914,519.437, AOV 417.21) are full-coverage figures.
+- **Trend visuals exclude it** with a visual filter `UCI Date[is_reporting_month] = TRUE` (dbt/DE completeness flag), and each says so in its subtitle.
+- Cohort retention blanks any active month where `is_complete_month` = FALSE.
+
+**Pages.** They sit after the Olist pages in the page navigator under the "UCI …" prefix (label: UCI Online Retail II (GBP)). Each page carries the subtitle "UCI Online Retail II (GBP): separate UK dataset, not comparable with Olist (BRL)" and has its own UCI date and country slicers.
+- **UCI Retail Overview:**
+  - Cards: Net Sales (proxy), Invoiced Value, sales invoices, AOV, active customers, units per invoice.
+  - Monthly trend (excludes 2011-12).
+  - Net Sales (proxy) by country, plus a non-UK country contribution view.
+  - Top products table, totals off.
+- **UCI Customers & Retention:**
+  - Active customers (identified only; 22.8% of lines have no Customer ID).
+  - New customers (2009-12 overstated).
+  - Repeat rate (full coverage).
+  - RFM R×F matrix (PARTIAL caveat).
+  - Cohort retention matrix (PARTIAL caveat from kpis.yaml).
+- **UCI Cancellations & Discounts:**
+  - The three cancellation rates, cancellations, discounts, postage and fees.
+  - Monthly trend; by country; most-cancelled products.
+  - These are cancellations (C invoices), not confirmed returns.
+
+**RLS:** The "State Manager (demo)" role hides every UCI table with `FALSE()`. The state filter is Olist-only, and UCI has no Brazilian state.
+
+**Validator checks** (`domain-separation`). The validator fails if:
+- any relationship connects a UCI table to an Olist table;
+- any visual mixes UCI and Olist fields;
+- any measure references the other domain's tables or measures;
+- a UCI page lacks the "not comparable with Olist" subtitle;
+- the demo role does not hide every UCI table.
+
+UCI tables are those named `UCI …` and `_Measures UCI`.
+
+**NOT SUPPORTED (UCI)** — no measures or visuals were built for these:
+- Recognised revenue, margin and profit. There is no cost data, and Net Sales (proxy) is not revenue.
+- Confirmed returns and refunds. C invoices are cancellations and are not linked to their original invoice.
+- Comparing or combining any figure with Olist (different country, currency and period).
+- FX conversion of GBP.
+- RFM segment names. Labels are to be set by the owner (KPI_UCI_RFM_SEGMENT PARTIAL).
+
+**Pending on DE / owner:**
+- RFM segment-label rules.
+- A "share of lines without Customer ID" measure. It is shown as caveat text only, because kpis.yaml has no UCI supporting measure; it needs approval.
+- Retention: the 2009-12 cohort mixes pre-existing customers.
+
 ## Regenerate and validate
 ```
 python tools/build_pbip.py                       # regenerates both folders (deterministic ids)
-python tools/validate_pbip.py --schemas <clone of github.com/microsoft/json-schemas> --model-json <tom-export.json>
+/workspace/enterprise360/.venv/bin/python tools/validate_pbip.py --schemas <clone of github.com/microsoft/json-schemas> --model-json <tom-export.json>
 ```
 `--model-json` is the TOM JSON export of the TMDL folder, produced by the TmdlSerializer check (a small .NET 8 console app using `Microsoft.AnalysisServices.NetCore.retail.amd64`: `TmdlSerializer.DeserializeDatabaseFromFolder`, then `Model.Validate()`, then `JsonSerializer.SerializeDatabase`).
 Last run:

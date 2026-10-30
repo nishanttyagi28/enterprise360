@@ -1,0 +1,252 @@
+/// UCI Online Retail II measures (GBP). Separate UK dataset; never combined with Olist (BRL). Names/ids follow kpis.yaml domain uci.
+table '_Measures UCI'
+	lineageTag: 913c561e-fe7a-5992-be58-6ff5f0f45292
+
+	/// KPI_UCI_GROSS_SALES (SUPPORTED): Invoiced value of product lines on non-cancellation invoices (GBP). Invoiced value, not recognized revenue. Full coverage = 19,643,861.637.
+	measure 'UCI Gross Product Sales' = CALCULATE ( SUM ( 'UCI Invoice Line'[line_value] ), KEEPFILTERS ( 'UCI Invoice Line'[is_product_line] = TRUE () ), KEEPFILTERS ( 'UCI Invoice Line'[is_cancellation] = FALSE () ) )
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: 77d2af3c-26a0-57fd-8ffb-f1d60402daed
+
+		annotation KPI_Id = KPI_UCI_GROSS_SALES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_PRODUCT_CANCELLATIONS (SUPPORTED): Signed (negative) value of product lines on C invoices. Cancellations, not confirmed returns.
+	measure 'UCI Product Cancellations' = CALCULATE ( SUM ( 'UCI Invoice Line'[line_value] ), KEEPFILTERS ( 'UCI Invoice Line'[is_product_line] = TRUE () ), KEEPFILTERS ( 'UCI Invoice Line'[is_cancellation] = TRUE () ) )
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: cda64ffe-cb81-5020-aa50-a4b49c4de62e
+
+		annotation KPI_Id = KPI_UCI_PRODUCT_CANCELLATIONS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_DISCOUNTS (SUPPORTED): Signed value of discount lines (StockCode D).
+	measure 'UCI Discounts' = CALCULATE ( SUM ( 'UCI Invoice Line'[line_value] ), KEEPFILTERS ( 'UCI Invoice Line'[Line Type] = "discount" ) )
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: d304c871-de30-5f6d-9ee9-99a6c9d0b7a5
+
+		annotation KPI_Id = KPI_UCI_DISCOUNTS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_NET_SALES_PROXY (SUPPORTED): Net Sales (proxy) = gross product sales + product cancellations + discounts (signed); postage and fees excluded. Operational proxy, not recognized revenue. Full coverage = 18,914,519.437.
+	measure 'UCI Net Sales (proxy)' = [UCI Gross Product Sales] + [UCI Product Cancellations] + [UCI Discounts]
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: 7b25e9c3-fa6f-5543-bf0f-cf3ccfe42e5a
+
+		annotation KPI_Id = KPI_UCI_NET_SALES_PROXY
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_POSTAGE_FEES (SUPPORTED): Postage lines (POST, DOT, C2), reported separately; excluded from Net Sales (proxy).
+	measure 'UCI Postage' = CALCULATE ( SUM ( 'UCI Invoice Line'[line_value] ), KEEPFILTERS ( 'UCI Invoice Line'[Line Type] = "postage" ) )
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: b3aca4d8-c146-557f-a9ce-aa5a8d98587f
+
+		annotation KPI_Id = KPI_UCI_POSTAGE_FEES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_POSTAGE_FEES (SUPPORTED): Fee lines (BANK CHARGES, AMAZONFEE, CRUK), reported separately; excluded from Net Sales (proxy).
+	measure 'UCI Fees' = CALCULATE ( SUM ( 'UCI Invoice Line'[line_value] ), KEEPFILTERS ( 'UCI Invoice Line'[Line Type] = "fee" ) )
+		formatString: £#,0
+		displayFolder: UCI Retail (GBP)\Sales
+		lineageTag: 6472ad4e-f697-5753-8283-a27cc9ddbd94
+
+		annotation KPI_Id = KPI_UCI_POSTAGE_FEES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_INVOICES (SUPPORTED): Distinct non-cancellation invoices (all line types). Full coverage = 45,336. Not filtered by UCI Product.
+	measure 'UCI Sales Invoices' = CALCULATE ( COUNTROWS ( 'UCI Invoice' ), KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = FALSE () ) )
+		formatString: #,0
+		displayFolder: UCI Retail (GBP)\Invoices
+		lineageTag: 6383de1b-72bd-5cdb-8792-5d94eff49d81
+
+		annotation KPI_Id = KPI_UCI_INVOICES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_AOV (SUPPORTED): Average invoice value = SUM(net_sales_proxy_gbp) / SUM(sales_invoice_count) at any grain (ratio of sums; never an average of aov_gbp). Full coverage = 417.21. Not meaningful under a UCI Product filter (denominator is invoice-level).
+	measure 'UCI AOV' = DIVIDE ( [UCI Net Sales (proxy)], [UCI Sales Invoices] )
+		formatString: £#,0.00
+		displayFolder: UCI Retail (GBP)\Invoices
+		lineageTag: 2b8c0fca-31d6-548f-b67b-38452d9ce1e2
+
+		annotation KPI_Id = KPI_UCI_AOV
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_UNITS_PER_INVOICE (SUPPORTED): Product units sold / sales invoices with products (ratio of sums).
+	measure 'UCI Units per Invoice' =
+			DIVIDE (
+				CALCULATE ( SUM ( 'UCI Invoice'[product_units] ), KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = FALSE () ) ),
+				CALCULATE ( COUNTROWS ( 'UCI Invoice' ), KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = FALSE () ), KEEPFILTERS ( 'UCI Invoice'[product_line_count] > 0 ) )
+			)
+		formatString: #,0.0
+		displayFolder: UCI Retail (GBP)\Invoices
+		lineageTag: 8ef5ef06-b20b-5038-8914-5d802e96adbc
+
+		annotation KPI_Id = KPI_UCI_UNITS_PER_INVOICE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_CANCEL_RATE_VALUE (SUPPORTED): |Product cancellations| / gross product sales (ratio of sums). Period rate with no C->original invoice link; can exceed 100% at fine grain.
+	measure 'UCI Cancellation Rate % (Value)' = DIVIDE ( ABS ( [UCI Product Cancellations] ), [UCI Gross Product Sales] )
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Cancellations
+		lineageTag: 983c785a-9fa5-52bf-bbb2-747058fd4a18
+
+		annotation KPI_Id = KPI_UCI_CANCEL_RATE_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_CANCEL_RATE_LINES (SUPPORTED): Product lines on C invoices / all product lines.
+	measure 'UCI Cancellation Rate % (Lines)' =
+			DIVIDE (
+				CALCULATE ( COUNTROWS ( 'UCI Invoice Line' ), KEEPFILTERS ( 'UCI Invoice Line'[is_product_line] = TRUE () ), KEEPFILTERS ( 'UCI Invoice Line'[is_cancellation] = TRUE () ) ),
+				CALCULATE ( COUNTROWS ( 'UCI Invoice Line' ), KEEPFILTERS ( 'UCI Invoice Line'[is_product_line] = TRUE () ) )
+			)
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Cancellations
+		lineageTag: 7de116b1-708d-50b0-8762-cb53a425c985
+
+		annotation KPI_Id = KPI_UCI_CANCEL_RATE_LINES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_CANCEL_RATE_INVOICES (SUPPORTED): Cancellation invoices / (sales invoices + cancellation invoices).
+	measure 'UCI Cancellation Rate % (Invoices)' =
+			DIVIDE (
+				CALCULATE ( COUNTROWS ( 'UCI Invoice' ), KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = TRUE () ) ),
+				COUNTROWS ( 'UCI Invoice' )
+			)
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Cancellations
+		lineageTag: e9449e27-01d4-5858-aebe-f0c10bb31d94
+
+		annotation KPI_Id = KPI_UCI_CANCEL_RATE_INVOICES
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_ACTIVE_CUSTOMERS (SUPPORTED): Distinct identified customers with >=1 sales invoice in period (identified only; never sum daily counts).
+	measure 'UCI Active Customers' =
+			CALCULATE (
+				DISTINCTCOUNT ( 'UCI Invoice'[uci_customer_sk] ),
+				KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = FALSE () ),
+				KEEPFILTERS ( 'UCI Invoice'[has_customer] = TRUE () )
+			)
+		formatString: #,0
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: 4334bd33-ca11-5a95-a49c-1cd4bc2f68c6
+
+		annotation KPI_Id = KPI_UCI_ACTIVE_CUSTOMERS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_NEW_CUSTOMERS (SUPPORTED): Identified customers whose first purchase month falls in the period. 2009-12 overstated (dataset start, no prior history).
+	measure 'UCI New Customers' =
+			VAR _start = MIN ( 'UCI Date'[Date] )
+			VAR _end = MAX ( 'UCI Date'[Date] )
+			RETURN
+				CALCULATE (
+					COUNTROWS ( 'UCI Customer' ),
+					KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ),
+					KEEPFILTERS ( 'UCI Customer'[First Purchase Month] >= DATE ( YEAR ( _start ), MONTH ( _start ), 1 ) && 'UCI Customer'[First Purchase Month] <= _end )
+				)
+		formatString: #,0
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: 73960879-0f6f-5604-a33a-afeacd1adee1
+
+		annotation KPI_Id = KPI_UCI_NEW_CUSTOMERS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_REPEAT_RATE (SUPPORTED): Identified customers with >=2 sales invoices over full coverage (2009-12-01 to 2011-12-09) / identified customers. Not period-sensitive.
+	measure 'UCI Repeat Rate %' =
+			DIVIDE (
+				CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ), KEEPFILTERS ( 'UCI Customer'[is_repeat_customer] = TRUE () ) ),
+				CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ) )
+			)
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: 0e040dae-0293-57bb-a748-5a0319abf11f
+
+		annotation KPI_Id = KPI_UCI_REPEAT_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_RETENTION (PARTIAL): Share of a monthly first-purchase cohort active n months later (read per cohort x months since first purchase). Partial active months (2011-12) are blank. PARTIAL: 2009-12 cohort mixes pre-existing customers; 22.8% of lines without Customer ID excluded.
+	measure 'UCI Cohort Retention %' =
+			VAR _completeMonths =
+				CALCULATETABLE (
+					VALUES ( 'UCI Date'[Month Start] ),
+					REMOVEFILTERS ( 'UCI Date' ),
+					'UCI Date'[is_complete_month] = TRUE ()
+				)
+			RETURN
+				CALCULATE (
+					DIVIDE ( SUM ( 'UCI Cohort'[active_customers] ), SUM ( 'UCI Cohort'[cohort_customers] ) ),
+					TREATAS ( _completeMonths, 'UCI Cohort'[Active Month] )
+				)
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: a943d9cc-e3c0-5feb-b661-88d43ea138b8
+
+		annotation KPI_Id = KPI_UCI_RETENTION
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_UCI_RFM_SEGMENT (PARTIAL): Identified customers per R/F/M score combination (NTILE(5), snapshot 2011-12-10). Descriptive, not a prediction. PARTIAL: segment-label rules to be documented by owner.
+	measure 'UCI Customers by RFM Segment' = COUNTROWS ( 'UCI RFM' )
+		formatString: #,0
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: f716ba4f-924b-54ad-8a22-2aaf02df573d
+
+		annotation KPI_Id = KPI_UCI_RFM_SEGMENT
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_UCI_PRODUCT_CONTRIBUTION (SUPPORTED): Product share of gross product sales.
+	measure 'UCI Product Contribution %' = DIVIDE ( [UCI Gross Product Sales], CALCULATE ( [UCI Gross Product Sales], REMOVEFILTERS ( 'UCI Product' ) ) )
+		formatString: 0.00%
+		displayFolder: UCI Retail (GBP)\Mix
+		lineageTag: f8ee61c3-c25b-5c03-b60a-b279cf3ff64e
+
+		annotation KPI_Id = KPI_UCI_PRODUCT_CONTRIBUTION
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_UCI_COUNTRY_CONTRIBUTION (SUPPORTED): Invoice-country share of gross product sales (UK about 85.5%; non-UK view shown separately).
+	measure 'UCI Country Contribution %' = DIVIDE ( [UCI Gross Product Sales], CALCULATE ( [UCI Gross Product Sales], REMOVEFILTERS ( 'UCI Country' ) ) )
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Mix
+		lineageTag: 40767b01-0370-5fce-9f03-21c22fa83b0e
+
+		annotation KPI_Id = KPI_UCI_COUNTRY_CONTRIBUTION
+
+		annotation KPI_Status = SUPPORTED
+
+	column Value
+		dataType: string
+		isHidden
+		lineageTag: c1ad9c9c-5358-56c9-a25f-859442f212ae
+		summarizeBy: none
+		sourceColumn: Value
+
+		annotation SummarizationSetBy = Automatic
+
+	partition '_Measures UCI' = m
+		mode: import
+		source =
+				let
+					Source = #table(type table [Value = text], {})
+				in
+					Source
+
+	annotation PBI_ResultType = Table

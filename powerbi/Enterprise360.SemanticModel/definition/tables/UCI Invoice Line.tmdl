@@ -1,0 +1,105 @@
+/// UCI fact at invoice-line grain (1,033,036 deduplicated lines). GBP. Source of all value measures.
+table 'UCI Invoice Line'
+	lineageTag: 067a358b-9b1d-5dbe-bb10-bacf9d9fd37f
+
+	column uci_product_sk
+		dataType: string
+		isHidden
+		lineageTag: 14e767ad-869c-50d1-9008-94941b748bde
+		summarizeBy: none
+		sourceColumn: uci_product_sk
+
+		annotation SummarizationSetBy = User
+
+	column uci_customer_sk
+		dataType: string
+		isHidden
+		lineageTag: 90949785-8d2c-5c54-861d-d1dc2f7790d6
+		summarizeBy: none
+		sourceColumn: uci_customer_sk
+
+		annotation SummarizationSetBy = User
+
+	column uci_country_sk
+		dataType: string
+		isHidden
+		lineageTag: d92dd3c3-a2bf-5483-8b44-e861c1d57514
+		summarizeBy: none
+		sourceColumn: uci_country_sk
+
+		annotation SummarizationSetBy = User
+
+	column invoice_date_key
+		dataType: int64
+		isHidden
+		lineageTag: df55f908-f127-57fd-8a68-ebb1f7f5387e
+		summarizeBy: none
+		sourceColumn: invoice_date_key
+
+		annotation SummarizationSetBy = User
+
+	column line_value
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: 11fe86b1-0caa-5002-a12f-f5a341db0abd
+		summarizeBy: none
+		sourceColumn: line_value
+
+		annotation SummarizationSetBy = User
+
+	column quantity
+		dataType: int64
+		isHidden
+		lineageTag: ddfbb885-89b3-5f2b-aa63-03726840d3e8
+		summarizeBy: none
+		sourceColumn: quantity
+
+		annotation SummarizationSetBy = User
+
+	column is_cancellation
+		dataType: boolean
+		isHidden
+		lineageTag: 3a2be303-74b9-59fc-8a9d-7fa608e576a6
+		summarizeBy: none
+		sourceColumn: is_cancellation
+
+		annotation SummarizationSetBy = User
+
+	column is_product_line
+		dataType: boolean
+		isHidden
+		lineageTag: 31b116a6-dbcb-5f12-909b-177fc170828e
+		summarizeBy: none
+		sourceColumn: is_product_line
+
+		annotation SummarizationSetBy = User
+
+	column has_customer
+		dataType: boolean
+		isHidden
+		lineageTag: 4756dc10-843b-59cb-881a-bc596b3436b5
+		summarizeBy: none
+		sourceColumn: has_customer
+
+		annotation SummarizationSetBy = User
+
+	column 'Line Type'
+		dataType: string
+		lineageTag: 57cce778-b0af-57d9-86d9-55066261b473
+		summarizeBy: none
+		sourceColumn: line_type
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Invoice Line' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_fct_invoice_lines"]}[Data],
+					Selected = Table.SelectColumns(Data, {"uci_product_sk", "uci_customer_sk", "uci_country_sk", "invoice_date_key", "line_value", "quantity", "is_cancellation", "is_product_line", "has_customer", "line_type"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

@@ -1,0 +1,74 @@
+/// uci_mart_customer_rfm: one row per identified customer at snapshot 2011-12-10. Descriptive NTILE(5) scores, not a prediction. Standalone.
+table 'UCI RFM'
+	lineageTag: bbeadd21-31f4-5054-98c4-6c1eff818675
+
+	column 'Customer ID'
+		dataType: int64
+		formatString: 0
+		lineageTag: 69130507-07c0-5952-b244-0a0affc94e1e
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = User
+
+	column 'R Score'
+		dataType: int64
+		lineageTag: c75f7602-b2c8-597c-9d9c-3f32d45ff33e
+		summarizeBy: none
+		sourceColumn: r_score
+
+		annotation SummarizationSetBy = User
+
+	column 'F Score'
+		dataType: int64
+		lineageTag: dc4a6dff-015a-546d-8a01-2d4d98631d3a
+		summarizeBy: none
+		sourceColumn: f_score
+
+		annotation SummarizationSetBy = User
+
+	column 'M Score'
+		dataType: int64
+		lineageTag: 6de3113a-f1a2-57b1-bc3d-96a5369b924b
+		summarizeBy: none
+		sourceColumn: m_score
+
+		annotation SummarizationSetBy = User
+
+	column 'Recency Days'
+		dataType: int64
+		lineageTag: e3c4069b-d134-558c-bf81-80f74ce96ca4
+		summarizeBy: none
+		sourceColumn: recency_days
+
+		annotation SummarizationSetBy = User
+
+	column Frequency
+		dataType: int64
+		lineageTag: ded33fe2-dd96-5c1e-8fef-e1794924d49d
+		summarizeBy: none
+		sourceColumn: frequency
+
+		annotation SummarizationSetBy = User
+
+	column monetary_net_sales_proxy_gbp
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: c1784c1c-80d1-53df-a8aa-7b4fdc4ec8d5
+		summarizeBy: none
+		sourceColumn: monetary_net_sales_proxy_gbp
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI RFM' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUciMarts, Item = "uci_mart_customer_rfm"]}[Data],
+					Selected = Table.SelectColumns(Data, {"customer_id", "r_score", "f_score", "m_score", "recency_days", "frequency", "monetary_net_sales_proxy_gbp"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

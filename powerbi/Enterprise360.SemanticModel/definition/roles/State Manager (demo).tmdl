@@ -8,4 +8,20 @@ role 'State Manager (demo)'
 
 	tablePermission 'DQ Run Summary' = FALSE ()
 
+	tablePermission 'UCI Invoice Line' = FALSE ()
+
+	tablePermission 'UCI Invoice' = FALSE ()
+
+	tablePermission 'UCI Date' = FALSE ()
+
+	tablePermission 'UCI Customer' = FALSE ()
+
+	tablePermission 'UCI Product' = FALSE ()
+
+	tablePermission 'UCI Country' = FALSE ()
+
+	tablePermission 'UCI Cohort' = FALSE ()
+
+	tablePermission 'UCI RFM' = FALSE ()
+
 	annotation PBI_Id = e3f17bcfa6c2501fa0e9242e5bf03c1a

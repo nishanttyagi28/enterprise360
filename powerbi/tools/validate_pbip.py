@@ -62,7 +62,9 @@ def walk_fields(obj, out):
     if isinstance(obj, dict):
         for k in ("Measure", "Column"):
             if k in obj and isinstance(obj[k], dict) and "Property" in obj[k]:
-                out.append((k, obj[k]["Expression"]["SourceRef"]["Entity"], obj[k]["Property"]))
+                sref = obj[k]["Expression"]["SourceRef"]
+                if "Entity" in sref:  # alias refs (SourceRef.Source) inside filter Where clauses resolve via From
+                    out.append((k, sref["Entity"], obj[k]["Property"]))
         for v in obj.values():
             walk_fields(v, out)
     elif isinstance(obj, list):
@@ -106,6 +108,7 @@ def cross_refs(model_json: Path) -> int:
     print(f"roles: {[r['name'] for r in m.get('roles', [])]}")
     errors += report_refs()
     errors += rls_safety(m)
+    errors += domain_separation(m)
     n_vis = 0
     for vf in sorted((ROOT / "Enterprise360.Report").rglob("visual.json")):
         n_vis += 1
@@ -118,6 +121,64 @@ def cross_refs(model_json: Path) -> int:
             elif kind == "Column" and (ent, prop) in hidden:
                 print(f"WARN {vf.parent.name}: hidden column {ent}.{prop} used")
     print(f"cross-reference: {len(m['relationships'])} relationships, {len(meas)} measures, {n_vis} visuals checked, {errors} errors")
+    return errors
+
+
+UCI_MEASURES_TABLE = "_Measures UCI"
+UCI_PAGE_SUBTITLE = "not comparable with Olist"
+UCI_RLS_ROLE = "State Manager (demo)"
+
+
+def is_uci(table: str) -> bool:
+    return table.startswith("UCI ") or table == UCI_MEASURES_TABLE
+
+
+def domain_separation(m: dict) -> int:
+    """UCI Online Retail II (GBP) and Olist (BRL) must never be joined or mixed."""
+    errors = 0
+    tables = {t["name"] for t in m["tables"]}
+    uci = {t for t in tables if is_uci(t)}
+    for r in m.get("relationships", []):
+        if is_uci(r["fromTable"]) != is_uci(r["toTable"]):
+            print(f"FAIL relationship connects UCI and Olist: {r['fromTable']}[{r['fromColumn']}] -> {r['toTable']}[{r['toColumn']}]"); errors += 1
+    mdomain = {ms["name"]: is_uci(t["name"]) for t in m["tables"] for ms in t.get("measures", [])}
+    for t in m["tables"]:
+        for ms in t.get("measures", []):
+            expr = ms["expression"] if isinstance(ms["expression"], str) else "\n".join(ms["expression"])
+            refs = set(re.findall(r"'([^']+)'", expr)) & tables
+            refs |= {x for x in re.findall(r"(?<![\w'\]])([A-Za-z_][A-Za-z0-9_ ]*)\[", expr) if x in tables}
+            mrefs = {x for x in re.findall(r"(?<![\w'\]])\[([^\]]+)\]", expr) if x in mdomain}
+            mine = is_uci(t["name"])
+            bad = [x for x in refs if is_uci(x) != mine] + [x for x in mrefs if mdomain[x] != mine]
+            if bad:
+                print(f"FAIL measure {t['name']}[{ms['name']}] mixes UCI and Olist references: {bad}"); errors += 1
+    role = next((r for r in m.get("roles", []) if r["name"] == UCI_RLS_ROLE), None)
+    if role is not None:
+        perms = {tp["name"]: tp.get("filterExpression", "").replace(" ", "").upper() for tp in role.get("tablePermissions", [])}
+        for t in sorted(uci - {UCI_MEASURES_TABLE}):
+            if perms.get(t) != "FALSE()":
+                print(f"FAIL role {UCI_RLS_ROLE}: UCI table {t} not hidden (expected FALSE())"); errors += 1
+    n_vis = n_uci_vis = 0
+    uci_pages: dict = {}
+    for vf in sorted((ROOT / "Enterprise360.Report").rglob("visual.json")):
+        n_vis += 1
+        refs: list = []
+        v = json.loads(vf.read_text(encoding="utf-8"))
+        walk_fields(v, refs)
+        ents = {ent for _, ent, _ in refs}
+        page = vf.parent.parent.parent.name
+        if ents and all(is_uci(e) for e in ents):
+            n_uci_vis += 1
+            uci_pages.setdefault(page, False)
+        if any(is_uci(e) for e in ents) and any(not is_uci(e) for e in ents):
+            print(f"FAIL visual {vf.parent.name} mixes UCI and Olist fields: {sorted(ents)}"); errors += 1
+        if UCI_PAGE_SUBTITLE in json.dumps(v):
+            uci_pages[page] = True
+    for page, ok in uci_pages.items():
+        if not ok:
+            print(f"FAIL UCI page {page}: no '{UCI_PAGE_SUBTITLE}' subtitle"); errors += 1
+    print(f"domain-separation: {len(uci)} UCI tables, {len(m.get('relationships', []))} relationships checked, "
+          f"{n_vis} visuals ({n_uci_vis} UCI) on {len(uci_pages)} UCI pages, {errors} violations")
     return errors
 
 

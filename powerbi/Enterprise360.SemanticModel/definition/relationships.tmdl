@@ -37,3 +37,31 @@ relationship bb72f534-349e-52ac-aa7b-f16144672736
 relationship 0fc78719-da60-5493-8c3a-948399ac04db
 	fromColumn: 'DQ Results'.'Run ID'
 	toColumn: 'DQ Run Summary'.'Run ID'
+
+relationship 0fa98a9f-7eb7-58b0-a17a-fc03f8c5712a
+	fromColumn: 'UCI Invoice Line'.uci_product_sk
+	toColumn: 'UCI Product'.uci_product_sk
+
+relationship 64b20b94-17f0-50ff-ae22-726e9b5c94ed
+	fromColumn: 'UCI Invoice Line'.uci_customer_sk
+	toColumn: 'UCI Customer'.uci_customer_sk
+
+relationship 3709b71d-74fc-5049-a7af-3a186363ca2a
+	fromColumn: 'UCI Invoice Line'.uci_country_sk
+	toColumn: 'UCI Country'.uci_country_sk
+
+relationship a3dec75c-7b1b-55e1-ad59-0caecaecc0a7
+	fromColumn: 'UCI Invoice Line'.invoice_date_key
+	toColumn: 'UCI Date'.date_key
+
+relationship 05f3f0ab-d7c1-5291-85db-d3ad904d0e75
+	fromColumn: 'UCI Invoice'.uci_customer_sk
+	toColumn: 'UCI Customer'.uci_customer_sk
+
+relationship e974361b-0356-59ee-aa9f-210733e3db9c
+	fromColumn: 'UCI Invoice'.uci_country_sk
+	toColumn: 'UCI Country'.uci_country_sk
+
+relationship 735fc098-65be-5f0d-a764-1696a687e305
+	fromColumn: 'UCI Invoice'.invoice_date_key
+	toColumn: 'UCI Date'.date_key

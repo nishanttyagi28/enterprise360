@@ -60,11 +60,11 @@ KEY = {"hidden": True, "summarize": "none"}
 
 
 def pg_source(dbt_model: str, cols: list[str], extra_steps: list[str] | None = None,
-              optional: bool = False) -> list[str]:
+              optional: bool = False, schema: str = "PgSchema") -> list[str]:
     """M for one dbt relation. optional=True: an absent relation yields an empty table with the same
     columns instead of failing the whole refresh (used for core.dq_results until it is built)."""
     sel = ", ".join(f'"{c}"' for c in cols)
-    nav = f'Source{{[Schema = PgSchema, Item = "{dbt_model}"]}}[Data]'
+    nav = f'Source{{[Schema = {schema}, Item = "{dbt_model}"]}}[Data]'
     if optional:
         empty = "#table(type table [" + ", ".join(f"{c} = any" for c in cols) + "], {})"
         nav = f"try {nav} otherwise {empty}"
@@ -280,10 +280,121 @@ if DATE_COMPLETE_FLAG_COLUMN:
     _date = next(t for t in TABLES if t["name"] == "Date")
     _date["cols"].append((DATE_COMPLETE_FLAG_COLUMN, DATE_COMPLETE_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
 
+# --------------------------------------------------------------------------------------
+# UCI Online Retail II (GBP) -- separate domain. NO relationship to any Olist table.
+# --------------------------------------------------------------------------------------
+UCI_PREFIX = "UCI "
+UCI_MEASURES_TABLE = "_Measures UCI"
+U = {"schema": "PgSchemaUci"}
+UM = {"schema": "PgSchemaUciMarts"}
+UCI_TABLES: list[dict] = [
+    {**U, "name": "UCI Invoice Line", "dbt": "uci_fct_invoice_lines",
+     "desc": "UCI fact at invoice-line grain (1,033,036 deduplicated lines). GBP. Source of all value measures.",
+     "cols": [
+         ("uci_product_sk", "uci_product_sk", "string", KEY),
+         ("uci_customer_sk", "uci_customer_sk", "string", KEY),
+         ("uci_country_sk", "uci_country_sk", "string", KEY),
+         ("invoice_date_key", "invoice_date_key", "int64", KEY),
+         ("line_value", "line_value", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+         ("quantity", "quantity", "int64", {"hidden": True, "summarize": "none"}),
+         ("is_cancellation", "is_cancellation", "boolean", {"hidden": True, "summarize": "none"}),
+         ("is_product_line", "is_product_line", "boolean", {"hidden": True, "summarize": "none"}),
+         ("has_customer", "has_customer", "boolean", {"hidden": True, "summarize": "none"}),
+         ("Line Type", "line_type", "string", {"summarize": "none"}),
+     ]},
+    {**U, "name": "UCI Invoice", "dbt": "uci_fct_invoices",
+     "desc": "UCI fact at invoice grain (C-prefixed invoices = cancellations). Source of invoice/customer counts. GBP.",
+     "cols": [
+         ("Invoice", "invoice", "string", {"summarize": "none"}),
+         ("uci_customer_sk", "uci_customer_sk", "string", KEY),
+         ("uci_country_sk", "uci_country_sk", "string", KEY),
+         ("invoice_date_key", "invoice_date_key", "int64", KEY),
+         ("has_customer", "has_customer", "boolean", {"hidden": True, "summarize": "none"}),
+         ("is_cancellation", "is_cancellation", "boolean", {"hidden": True, "summarize": "none"}),
+         ("product_line_count", "product_line_count", "int64", {"hidden": True, "summarize": "none"}),
+         ("product_units", "product_units", "int64", {"hidden": True, "summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"invoice", type text}})']},
+    {**U, "name": "UCI Date", "dbt": "uci_dim_date", "date_table": True,
+     "desc": "UCI-only calendar (uci_dim_date, 2009-01-01..2012-12-31). Never shared with Olist. Trends filter is_reporting_month = TRUE (excludes partial 2011-12).",
+     "cols": [
+         ("date_key", "date_key", "int64", KEY),
+         ("Date", "date_day", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd", "key": True}),
+         ("Year", "year", "int64", {"summarize": "none", "fmt": "0"}),
+         ("Month No", "month", "int64", {"hidden": True, "summarize": "none", "fmt": "0"}),
+         ("Month", "month_name", "string", {"summarize": "none", "sortby": "Month No"}),
+         ("Month Start", "month_start", "dateTime", {"hidden": True, "summarize": "none", "fmt": "yyyy-mm-dd"}),
+         ("Year Month", "year_month", "string", {"summarize": "none", "sortby": "Month Start"}),
+         ("is_complete_month", "is_complete_month", "boolean", {"hidden": True, "summarize": "none"}),
+         ("is_reporting_month", "is_reporting_month", "boolean", {"hidden": True, "summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"date_day", type date}, {"month_start", type date}})']},
+    {**U, "name": "UCI Customer", "dbt": "uci_dim_customer",
+     "desc": "UCI customer (Customer ID); unknown member -1 = lines without Customer ID (is_identified = false). UCI only.",
+     "cols": [
+         ("uci_customer_sk", "uci_customer_sk", "string", KEY),
+         ("Customer ID", "customer_id", "int64", {"summarize": "none", "fmt": "0"}),
+         ("is_identified", "is_identified", "boolean", {"hidden": True, "summarize": "none"}),
+         ("Primary Country", "primary_country", "string", {"summarize": "none"}),
+         ("First Purchase Month", "first_purchase_month", "dateTime", {"summarize": "none", "fmt": "yyyy-mm"}),
+         ("is_repeat_customer", "is_repeat_customer", "boolean", {"hidden": True, "summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"first_purchase_month", type date}})']},
+    {**U, "name": "UCI Product", "dbt": "uci_dim_product",
+     "desc": "UCI stock code with most frequent description. UCI only (never Olist Product).",
+     "cols": [
+         ("uci_product_sk", "uci_product_sk", "string", KEY),
+         ("Stock Code", "stock_code", "string", {"summarize": "none"}),
+         ("Description", "description", "string", {"summarize": "none"}),
+         ("Primary Line Type", "primary_line_type", "string", {"summarize": "none"}),
+     ]},
+    {**U, "name": "UCI Country", "dbt": "uci_dim_country",
+     "desc": "UCI invoice country ('Unspecified' kept as its own member). UCI only (never Olist Geography).",
+     "cols": [
+         ("uci_country_sk", "uci_country_sk", "string", KEY),
+         ("Country", "country", "string", {"summarize": "none"}),
+         ("is_domestic", "is_domestic", "boolean", {"hidden": True, "summarize": "none"}),
+         ("ISO Alpha-2", "iso_alpha2", "string", {"summarize": "none"}),
+     ]},
+    {**UM, "name": "UCI Cohort", "dbt": "uci_mart_customer_cohorts",
+     "desc": "uci_mart_customer_cohorts: first-purchase cohort month x months since first purchase. Standalone (no relationships).",
+     "cols": [
+         ("Cohort Month", "cohort_month", "dateTime", {"summarize": "none", "fmt": "yyyy-mm"}),
+         ("Months Since First Purchase", "months_since_first_purchase", "int64", {"summarize": "none"}),
+         ("Active Month", "active_month", "dateTime", {"summarize": "none", "fmt": "yyyy-mm"}),
+         ("cohort_customers", "cohort_customers", "int64", {"hidden": True, "summarize": "none"}),
+         ("active_customers", "active_customers", "int64", {"hidden": True, "summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"cohort_month", type date}, {"active_month", type date}})']},
+    {**UM, "name": "UCI RFM", "dbt": "uci_mart_customer_rfm",
+     "desc": "uci_mart_customer_rfm: one row per identified customer at snapshot 2011-12-10. Descriptive NTILE(5) scores, not a prediction. Standalone.",
+     "cols": [
+         ("Customer ID", "customer_id", "int64", {"summarize": "none", "fmt": "0"}),
+         ("R Score", "r_score", "int64", {"summarize": "none"}),
+         ("F Score", "f_score", "int64", {"summarize": "none"}),
+         ("M Score", "m_score", "int64", {"summarize": "none"}),
+         ("Recency Days", "recency_days", "int64", {"summarize": "none"}),
+         ("Frequency", "frequency", "int64", {"summarize": "none"}),
+         ("monetary_net_sales_proxy_gbp", "monetary_net_sales_proxy_gbp", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+     ]},
+]
+TABLES.extend(UCI_TABLES)
+UCI_TABLE_NAMES = {t["name"] for t in UCI_TABLES} | {UCI_MEASURES_TABLE}
+UCI_RELS = [
+    ("UCI Invoice Line", "uci_product_sk", "UCI Product", "uci_product_sk", True),
+    ("UCI Invoice Line", "uci_customer_sk", "UCI Customer", "uci_customer_sk", True),
+    ("UCI Invoice Line", "uci_country_sk", "UCI Country", "uci_country_sk", True),
+    ("UCI Invoice Line", "invoice_date_key", "UCI Date", "date_key", True),
+    ("UCI Invoice", "uci_customer_sk", "UCI Customer", "uci_customer_sk", True),
+    ("UCI Invoice", "uci_country_sk", "UCI Country", "uci_country_sk", True),
+    ("UCI Invoice", "invoice_date_key", "UCI Date", "date_key", True),
+]
+
 ROLES = [
     # DEMO ONLY: static filter. Geography -> Customer -> Order -> Order Item / Payment / Delivery.
     ("State Manager (demo)", "DEMO ONLY: static row filter to customer state SP. Replace with a user-to-state mapping table + USERPRINCIPALNAME() for production.",
-     [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")] + ([("DQ Run Summary", "FALSE ()")] if USE_DQ_RUN_SUMMARY else [])),
+     [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")] + ([("DQ Run Summary", "FALSE ()")] if USE_DQ_RUN_SUMMARY else [])
+     + [(t["name"], "FALSE ()") for t in UCI_TABLES]),
 ]
 
 # Relationships: (from table, from col [many], to table, to col [one], active)
@@ -298,7 +409,7 @@ RELS = [
     ("Order", "purchase_date_key", "Date", "date_key", True),
     ("Customer", "customer_state", "Geography", "State", True),
 ] + ([("DQ Results", "Run ID", "DQ Run Summary", "Run ID", True)] if USE_DQ_RUN_SUMMARY else []) + [
-]
+] + UCI_RELS
 
 BRL = "R$ #,0"
 BRL2 = "R$ #,0.00"
@@ -504,6 +615,84 @@ MEASURES = [
      "Supporting DQ measure: row count of fct_payments in context."),
 ]
 
+# ---- UCI measures (names / ids / statuses exactly as governance/kpi_dictionary/kpis.yaml v2.0.0, domain uci)
+GBP, GBP2 = "£#,0", "£#,0.00"
+UF = "UCI Retail (GBP)"
+L_ = "'UCI Invoice Line'"
+PROD_SALE = f"KEEPFILTERS ( {L_}[is_product_line] = TRUE () ), KEEPFILTERS ( {L_}[is_cancellation] = FALSE () )"
+PROD_CANC = f"KEEPFILTERS ( {L_}[is_product_line] = TRUE () ), KEEPFILTERS ( {L_}[is_cancellation] = TRUE () )"
+SALES_INV = "KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = FALSE () )"
+UCI_MEASURES = [
+    (f"{UF}\\Sales", "UCI Gross Product Sales", "KPI_UCI_GROSS_SALES", "SUPPORTED", GBP,
+     [f"CALCULATE ( SUM ( {L_}[line_value] ), {PROD_SALE} )"],
+     "Invoiced value of product lines on non-cancellation invoices (GBP). Invoiced value, not recognized revenue. Full coverage = 19,643,861.637."),
+    (f"{UF}\\Sales", "UCI Product Cancellations", "KPI_UCI_PRODUCT_CANCELLATIONS", "SUPPORTED", GBP,
+     [f"CALCULATE ( SUM ( {L_}[line_value] ), {PROD_CANC} )"],
+     "Signed (negative) value of product lines on C invoices. Cancellations, not confirmed returns."),
+    (f"{UF}\\Sales", "UCI Discounts", "KPI_UCI_DISCOUNTS", "SUPPORTED", GBP,
+     [f"CALCULATE ( SUM ( {L_}[line_value] ), KEEPFILTERS ( {L_}[Line Type] = \"discount\" ) )"],
+     "Signed value of discount lines (StockCode D)."),
+    (f"{UF}\\Sales", "UCI Net Sales (proxy)", "KPI_UCI_NET_SALES_PROXY", "SUPPORTED", GBP,
+     ["[UCI Gross Product Sales] + [UCI Product Cancellations] + [UCI Discounts]"],
+     "Net Sales (proxy) = gross product sales + product cancellations + discounts (signed); postage and fees excluded. Operational proxy, not recognized revenue. Full coverage = 18,914,519.437."),
+    (f"{UF}\\Sales", "UCI Postage", "KPI_UCI_POSTAGE_FEES", "SUPPORTED", GBP,
+     [f"CALCULATE ( SUM ( {L_}[line_value] ), KEEPFILTERS ( {L_}[Line Type] = \"postage\" ) )"],
+     "Postage lines (POST, DOT, C2), reported separately; excluded from Net Sales (proxy)."),
+    (f"{UF}\\Sales", "UCI Fees", "KPI_UCI_POSTAGE_FEES", "SUPPORTED", GBP,
+     [f"CALCULATE ( SUM ( {L_}[line_value] ), KEEPFILTERS ( {L_}[Line Type] = \"fee\" ) )"],
+     "Fee lines (BANK CHARGES, AMAZONFEE, CRUK), reported separately; excluded from Net Sales (proxy)."),
+    (f"{UF}\\Invoices", "UCI Sales Invoices", "KPI_UCI_INVOICES", "SUPPORTED", "#,0",
+     [f"CALCULATE ( COUNTROWS ( 'UCI Invoice' ), {SALES_INV} )"],
+     "Distinct non-cancellation invoices (all line types). Full coverage = 45,336. Not filtered by UCI Product."),
+    (f"{UF}\\Invoices", "UCI AOV", "KPI_UCI_AOV", "SUPPORTED", GBP2,
+     ["DIVIDE ( [UCI Net Sales (proxy)], [UCI Sales Invoices] )"],
+     "Average invoice value = SUM(net_sales_proxy_gbp) / SUM(sales_invoice_count) at any grain (ratio of sums; never an average of aov_gbp). Full coverage = 417.21. Not meaningful under a UCI Product filter (denominator is invoice-level)."),
+    (f"{UF}\\Invoices", "UCI Units per Invoice", "KPI_UCI_UNITS_PER_INVOICE", "SUPPORTED", "#,0.0",
+     ["DIVIDE (", f"    CALCULATE ( SUM ( 'UCI Invoice'[product_units] ), {SALES_INV} ),",
+      f"    CALCULATE ( COUNTROWS ( 'UCI Invoice' ), {SALES_INV}, KEEPFILTERS ( 'UCI Invoice'[product_line_count] > 0 ) )", ")"],
+     "Product units sold / sales invoices with products (ratio of sums)."),
+    (f"{UF}\\Cancellations", "UCI Cancellation Rate % (Value)", "KPI_UCI_CANCEL_RATE_VALUE", "SUPPORTED", "0.0%",
+     ["DIVIDE ( ABS ( [UCI Product Cancellations] ), [UCI Gross Product Sales] )"],
+     "|Product cancellations| / gross product sales (ratio of sums). Period rate with no C->original invoice link; can exceed 100% at fine grain."),
+    (f"{UF}\\Cancellations", "UCI Cancellation Rate % (Lines)", "KPI_UCI_CANCEL_RATE_LINES", "SUPPORTED", "0.0%",
+     ["DIVIDE (", f"    CALCULATE ( COUNTROWS ( {L_} ), {PROD_CANC} ),",
+      f"    CALCULATE ( COUNTROWS ( {L_} ), KEEPFILTERS ( {L_}[is_product_line] = TRUE () ) )", ")"],
+     "Product lines on C invoices / all product lines."),
+    (f"{UF}\\Cancellations", "UCI Cancellation Rate % (Invoices)", "KPI_UCI_CANCEL_RATE_INVOICES", "SUPPORTED", "0.0%",
+     ["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'UCI Invoice' ), KEEPFILTERS ( 'UCI Invoice'[is_cancellation] = TRUE () ) ),",
+      "    COUNTROWS ( 'UCI Invoice' )", ")"],
+     "Cancellation invoices / (sales invoices + cancellation invoices)."),
+    (f"{UF}\\Customers", "UCI Active Customers", "KPI_UCI_ACTIVE_CUSTOMERS", "SUPPORTED", "#,0",
+     ["CALCULATE (", "    DISTINCTCOUNT ( 'UCI Invoice'[uci_customer_sk] ),", f"    {SALES_INV},",
+      "    KEEPFILTERS ( 'UCI Invoice'[has_customer] = TRUE () )", ")"],
+     "Distinct identified customers with >=1 sales invoice in period (identified only; never sum daily counts)."),
+    (f"{UF}\\Customers", "UCI New Customers", "KPI_UCI_NEW_CUSTOMERS", "SUPPORTED", "#,0",
+     ["VAR _start = MIN ( 'UCI Date'[Date] )", "VAR _end = MAX ( 'UCI Date'[Date] )", "RETURN",
+      "    CALCULATE (", "        COUNTROWS ( 'UCI Customer' ),", "        KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ),",
+      "        KEEPFILTERS ( 'UCI Customer'[First Purchase Month] >= DATE ( YEAR ( _start ), MONTH ( _start ), 1 ) && 'UCI Customer'[First Purchase Month] <= _end )",
+      "    )"],
+     "Identified customers whose first purchase month falls in the period. 2009-12 overstated (dataset start, no prior history)."),
+    (f"{UF}\\Customers", "UCI Repeat Rate %", "KPI_UCI_REPEAT_RATE", "SUPPORTED", "0.0%",
+     ["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ), KEEPFILTERS ( 'UCI Customer'[is_repeat_customer] = TRUE () ) ),",
+      "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ) )", ")"],
+     "Identified customers with >=2 sales invoices over full coverage (2009-12-01 to 2011-12-09) / identified customers. Not period-sensitive."),
+    (f"{UF}\\Customers", "UCI Cohort Retention %", "KPI_UCI_RETENTION", "PARTIAL", "0.0%",
+     ["VAR _completeMonths =", "    CALCULATETABLE (", "        VALUES ( 'UCI Date'[Month Start] ),", "        REMOVEFILTERS ( 'UCI Date' ),",
+      "        'UCI Date'[is_complete_month] = TRUE ()", "    )", "RETURN", "    CALCULATE (",
+      "        DIVIDE ( SUM ( 'UCI Cohort'[active_customers] ), SUM ( 'UCI Cohort'[cohort_customers] ) ),",
+      "        TREATAS ( _completeMonths, 'UCI Cohort'[Active Month] )", "    )"],
+     "Share of a monthly first-purchase cohort active n months later (read per cohort x months since first purchase). Partial active months (2011-12) are blank. PARTIAL: 2009-12 cohort mixes pre-existing customers; 22.8% of lines without Customer ID excluded."),
+    (f"{UF}\\Customers", "UCI Customers by RFM Segment", "KPI_UCI_RFM_SEGMENT", "PARTIAL", "#,0",
+     ["COUNTROWS ( 'UCI RFM' )"],
+     "Identified customers per R/F/M score combination (NTILE(5), snapshot 2011-12-10). Descriptive, not a prediction. PARTIAL: segment-label rules to be documented by owner."),
+    (f"{UF}\\Mix", "UCI Product Contribution %", "KPI_UCI_PRODUCT_CONTRIBUTION", "SUPPORTED", "0.00%",
+     ["DIVIDE ( [UCI Gross Product Sales], CALCULATE ( [UCI Gross Product Sales], REMOVEFILTERS ( 'UCI Product' ) ) )"],
+     "Product share of gross product sales."),
+    (f"{UF}\\Mix", "UCI Country Contribution %", "KPI_UCI_COUNTRY_CONTRIBUTION", "SUPPORTED", "0.0%",
+     ["DIVIDE ( [UCI Gross Product Sales], CALCULATE ( [UCI Gross Product Sales], REMOVEFILTERS ( 'UCI Country' ) ) )"],
+     "Invoice-country share of gross product sales (UK about 85.5%; non-UK view shown separately)."),
+]
+
 CALC_ITEMS = [
     ("Current", ["SELECTEDMEASURE ()"], None),
     ("MTD", ["CALCULATE ( SELECTEDMEASURE (), DATESMTD ( 'Date'[Date] ) )"], None),
@@ -561,7 +750,7 @@ def build_table(t: dict) -> str:
         out.append("\t\tannotation SummarizationSetBy = Automatic")
         out.append("")
     select = t.get("select") or [src for _, src, _, _ in t["cols"]]
-    m = pg_source(t["dbt"], select, t.get("steps"), optional=t.get("optional", False))
+    m = pg_source(t["dbt"], select, t.get("steps"), optional=t.get("optional", False), schema=t.get("schema", "PgSchema"))
     out.append(f"\tpartition {q(name)} = m")
     out.append("\t\tmode: import")
     out.append("\t\tsource =")
@@ -572,10 +761,11 @@ def build_table(t: dict) -> str:
     return "\n".join(out)
 
 
-def build_measures_table() -> str:
-    out = ["/// Home table for all explicit measures. Names follow docs/kpi-catalog.md; descriptions carry KPI ids.",
-           "table _Measures", f"\tlineageTag: {gid('table', '_Measures')}", ""]
-    for folder, name, kid, status, fmt, expr, desc in MEASURES:
+def build_measures_table(tname: str = "_Measures", measures: list | None = None,
+                         tdesc: str = "Home table for all explicit Olist measures (BRL). Names follow docs/kpi-catalog.md; descriptions carry KPI ids.") -> str:
+    measures = MEASURES if measures is None else measures
+    out = [f"/// {tdesc}", f"table {q(tname)}", f"\tlineageTag: {gid('table', tname)}", ""]
+    for folder, name, kid, status, fmt, expr, desc in measures:
         out.append(f"\t/// {kid} ({status}): {desc}")
         if len(expr) == 1:
             out.append(f"\tmeasure {q(name)} = {expr[0]}")
@@ -593,9 +783,9 @@ def build_measures_table() -> str:
         out.append("")
         out.append(f"\t\tannotation KPI_Status = {status}")
         out.append("")
-    out += ["\tcolumn Value", "\t\tdataType: string", "\t\tisHidden", f"\t\tlineageTag: {gid('col', '_Measures', 'Value')}",
+    out += ["\tcolumn Value", "\t\tdataType: string", "\t\tisHidden", f"\t\tlineageTag: {gid('col', tname, 'Value')}",
             "\t\tsummarizeBy: none", "\t\tsourceColumn: Value", "", "\t\tannotation SummarizationSetBy = Automatic", "",
-            "\tpartition _Measures = m", "\t\tmode: import", "\t\tsource =",
+            f"\tpartition {q(tname)} = m", "\t\tmode: import", "\t\tsource =",
             tmdl_expr(["let", "    Source = #table(type table [Value = text], {})", "in", "    Source"], 4), "",
             "\tannotation PBI_ResultType = Table", ""]
     return "\n".join(out)
@@ -631,11 +821,11 @@ def build_model() -> None:
     wjson(SM / "definition.pbism", {"$schema": f"{MS}/item/semanticModel/definitionProperties/1.0.0/schema.json",
                                     "version": "4.2", "settings": {}})
     write(d / "database.tmdl", "database\n\tcompatibilityLevel: 1567\n\n")
-    all_tables = [t["name"] for t in TABLES] + ["_Measures", "Time Intelligence"]
+    all_tables = [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE, "Time Intelligence"]
     model = ["model Model", "\tculture: en-US", "\tdefaultPowerBIDataSourceVersion: powerBI_V3",
              "\tdiscourageImplicitMeasures", "\tsourceQueryCulture: en-US", "\tdataAccessOptions",
              "\t\tlegacyRedirects", "\t\treturnErrorValuesAsNull", "",
-             'annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema"]', "",
+             'annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema","PgSchemaUci","PgSchemaUciMarts"]', "",
              "annotation __PBI_TimeIntelligenceEnabled = 0", "",
              "annotation PBI_ProTooling = [\"DevMode\"]", ""]
     model += [f"ref table {q(n)}" for n in all_tables] + [""] + [f"ref role {q(r[0])}" for r in ROLES] + ["", "ref cultureInfo en-US", ""]
@@ -648,7 +838,9 @@ def build_model() -> None:
     write(d / "model.tmdl", "\n".join(model))
     params = [("PgServer", "localhost:5432", "PostgreSQL server as host:port (laptop: localhost:5432)."),
               ("PgDatabase", "enterprise360", "PostgreSQL database."),
-              ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core).")]
+              ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core)."),
+              ("PgSchemaUci", "uci_core", "UCI Online Retail II core facts/dimensions (dbt +schema: uci_core)."),
+              ("PgSchemaUciMarts", "uci_marts", "UCI Online Retail II marts (cohorts, RFM; dbt +schema: uci_marts).")]
     ex = []
     for n, v, desc in params:
         ex += [f"/// {desc}",
@@ -670,6 +862,9 @@ def build_model() -> None:
     for t in TABLES:
         write(d / "tables" / f"{t['name']}.tmdl", build_table(t))
     write(d / "tables" / "_Measures.tmdl", build_measures_table())
+    write(d / "tables" / f"{UCI_MEASURES_TABLE}.tmdl", build_measures_table(
+        UCI_MEASURES_TABLE, UCI_MEASURES,
+        "UCI Online Retail II measures (GBP). Separate UK dataset; never combined with Olist (BRL). Names/ids follow kpis.yaml domain uci."))
     write(d / "tables" / "Time Intelligence.tmdl", build_calc_group())
 
 
@@ -722,7 +917,8 @@ class Page:
 
     def add(self, vname: str, vtype: str, pos: tuple, roles: dict | None = None, title: str | None = None,
             subtitle: str | None = None, sort: tuple | None = None, objects: dict | None = None,
-            tooltip_page: str | None = None, link: dict | None = None, hidden: bool = False, card: bool = True) -> str:
+            tooltip_page: str | None = None, link: dict | None = None, hidden: bool = False, card: bool = True,
+            filters: list | None = None) -> str:
         x, y, w, h = pos
         self.z += 1
         v: dict = {"visualType": vtype}
@@ -759,6 +955,14 @@ class Page:
                      "visual": v}
         if hidden:
             container["isHidden"] = True
+        if filters:
+            container["filterConfig"] = {"filters": [{
+                "name": hid(self.pid, vname, "filter", ent, prop), "field": fld("c", ent, prop), "type": "Categorical",
+                "filter": {"Version": 2, "From": [{"Name": "f", "Entity": ent, "Type": 0}],
+                           "Where": [{"Condition": {"In": {
+                               "Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "f"}}, "Property": prop}}],
+                               "Values": [[{"Literal": {"Value": "true" if val else "false"}}]]}}}]}}
+                for ent, prop, val in filters]}
         self.visuals.append(container)
         return name
 
@@ -1019,6 +1223,106 @@ sd.add("orders", "tableEx", (24, 460, 1232, 248),
        "Seller's orders (right-click > Drill through > Order Detail)", subtitle="GMV and freight = this seller's lines only",
        sort=("c", "Order", "Purchased At", "Descending"), objects=NO_TOTALS)
 PAGES.append(sd)
+
+# ---- UCI Online Retail II (GBP) pages -- UCI fields only, never mixed with Olist fields
+MU = UCI_MEASURES_TABLE
+UCI_GROUP = "UCI Online Retail II (GBP)"
+SUB_UCI = "UCI Online Retail II (GBP): separate UK dataset, not comparable with Olist (BRL)"
+TREND_NOTE = "Trend excludes 2011-12 (partial month, data ends 2011-12-09)"
+REPORTING_ONLY = [("UCI Date", "is_reporting_month", True)]
+SUB_UCI_PRODUCT = "Invoice-level KPIs are not shown by product; product rows are line values and do sum"
+PARTIAL_UCI_RETENTION = ("Partial: 2009-12 cohort mixes pre-existing customers (dataset start); 2011-12 active month is partial and blank; "
+                         "22.8% of lines have no Customer ID and are excluded")
+PARTIAL_UCI_RFM = "Partial: descriptive NTILE(5) scores at snapshot 2011-12-10, not a prediction; segment labels to be set by owner"
+NEW_CUST_NOTE = "Identified customers only; 2009-12 overstated (dataset start, no prior history)"
+
+
+def uci_header(pg: Page) -> None:
+    pg.add("nav", "pageNavigator", (24, 8, 1232, 36), card=False)
+    pg.add("slicer-date", "slicer", (24, 52, 420, 48), {"Values": [("c", "UCI Date", "Date")]}, "Invoice date (UCI)",
+           subtitle=SUB_UCI, objects=SLICER_OBJ)
+    pg.add("slicer-country", "slicer", (456, 52, 300, 48), {"Values": [("c", "UCI Country", "Country")]}, "Invoice country (UCI)",
+           objects={"data": [{"properties": {"mode": lit("Dropdown")}}]})
+
+
+def uci_cards(pg: Page, specs: list[tuple], y: int = 108, h: int = 92) -> None:
+    n, gap, x0, w_total = len(specs), 12, 24, 1232
+    w = (w_total - gap * (n - 1)) // n
+    for i, spec in enumerate(specs):
+        meas, title = spec[0], spec[1]
+        sub = spec[2] if len(spec) > 2 else None
+        pg.add(f"card-{meas}", "card", (x0 + i * (w + gap), y, w, h), {"Values": [("m", MU, meas)]}, title,
+               subtitle=sub, objects=CARD_OBJ)
+
+
+uo = Page("uci-retail-overview", "UCI Retail Overview")
+uci_header(uo)
+uci_cards(uo, [("UCI Net Sales (proxy)", "Net Sales (proxy) (GBP)"),
+               ("UCI Gross Product Sales", "Invoiced Value (gross product sales, GBP)"),
+               ("UCI Sales Invoices", "Sales invoices"), ("UCI AOV", "AOV (GBP)"),
+               ("UCI Active Customers", "Active customers", "Identified customers only"),
+               ("UCI Units per Invoice", "Units per invoice")])
+uo.add("trend", "lineChart", (24, CONTENT_Y, 760, 240),
+       {"Category": [("c", "UCI Date", "Year Month")], "Y": [("m", MU, "UCI Net Sales (proxy)"), ("m", MU, "UCI Gross Product Sales", "Invoiced Value (gross product sales)")]},
+       "Net Sales (proxy) and Invoiced Value by month (GBP)", subtitle=TREND_NOTE,
+       sort=("c", "UCI Date", "Year Month", "Ascending"), filters=REPORTING_ONLY)
+uo.add("country", "clusteredBarChart", (796, CONTENT_Y, 460, 240),
+       {"Category": [("c", "UCI Country", "Country")], "Y": [("m", MU, "UCI Net Sales (proxy)")]},
+       "Net Sales (proxy) by invoice country (GBP)", sort=("m", MU, "UCI Net Sales (proxy)", "Descending"))
+uo.add("country-nonuk", "clusteredBarChart", (24, 464, 400, 244),
+       {"Category": [("c", "UCI Country", "Country")], "Y": [("m", MU, "UCI Country Contribution %")]},
+       "Country contribution % - non-UK countries", subtitle="United Kingdom (about 85.5%) excluded from this view",
+       sort=("m", MU, "UCI Country Contribution %", "Descending"), filters=[("UCI Country", "is_domestic", False)])
+uo.add("top-products", "tableEx", (436, 464, 820, 244),
+       {"Values": [("c", "UCI Product", "Stock Code"), ("c", "UCI Product", "Description"),
+                   ("m", MU, "UCI Gross Product Sales", "Invoiced Value (gross product sales)"),
+                   ("m", MU, "UCI Product Cancellations"), ("m", MU, "UCI Product Contribution %")]},
+       "Top products by Invoiced Value (GBP)", subtitle=SUB_UCI_PRODUCT,
+       sort=("m", MU, "UCI Gross Product Sales", "Descending"), objects=NO_TOTALS)
+PAGES.append(uo)
+
+uc = Page("uci-customers-retention", "UCI Customers & Retention")
+uci_header(uc)
+uci_cards(uc, [("UCI Active Customers", "Active customers", "Identified customers only (22.8% of lines have no Customer ID)"),
+               ("UCI New Customers", "New customers", NEW_CUST_NOTE),
+               ("UCI Repeat Rate %", "Repeat rate % (full coverage)", "Full window 2009-12-01..2011-12-09; not period-sensitive"),
+               ("UCI Customers by RFM Segment", "Customers with RFM scores", PARTIAL_UCI_RFM)])
+uc.add("cust-trend", "lineChart", (24, CONTENT_Y, 616, 236),
+       {"Category": [("c", "UCI Date", "Year Month")], "Y": [("m", MU, "UCI Active Customers"), ("m", MU, "UCI New Customers")]},
+       "Active and new customers by month", subtitle=TREND_NOTE + ". " + NEW_CUST_NOTE,
+       sort=("c", "UCI Date", "Year Month", "Ascending"), filters=REPORTING_ONLY)
+uc.add("rfm", "pivotTable", (652, CONTENT_Y, 604, 236),
+       {"Rows": [("c", "UCI RFM", "R Score")], "Columns": [("c", "UCI RFM", "F Score")],
+        "Values": [("m", MU, "UCI Customers by RFM Segment")]},
+       "Customers by RFM score (R rows x F columns)", subtitle=PARTIAL_UCI_RFM)
+uc.add("retention", "pivotTable", (24, 460, 1232, 248),
+       {"Rows": [("c", "UCI Cohort", "Cohort Month")], "Columns": [("c", "UCI Cohort", "Months Since First Purchase")],
+        "Values": [("m", MU, "UCI Cohort Retention %")]},
+       "Cohort retention % (first-purchase month x months since first purchase)", subtitle=PARTIAL_UCI_RETENTION,
+       objects=NO_TOTALS)
+PAGES.append(uc)
+
+ur = Page("uci-cancellations", "UCI Cancellations & Discounts")
+uci_header(ur)
+uci_cards(ur, [("UCI Product Cancellations", "Product cancellations (GBP)", "Cancellations (C invoices), not confirmed returns"),
+               ("UCI Cancellation Rate % (Value)", "Cancellation rate % (value)"),
+               ("UCI Cancellation Rate % (Lines)", "Cancellation rate % (lines)"),
+               ("UCI Cancellation Rate % (Invoices)", "Cancellation rate % (invoices)"),
+               ("UCI Discounts", "Discounts (GBP)"), ("UCI Postage", "Postage (GBP)"), ("UCI Fees", "Fees (GBP)")])
+ur.add("cancel-trend", "lineChart", (24, CONTENT_Y, 760, 240),
+       {"Category": [("c", "UCI Date", "Year Month")], "Y": [("m", MU, "UCI Cancellation Rate % (Value)"), ("m", MU, "UCI Cancellation Rate % (Invoices)")]},
+       "Cancellation rate % by month", subtitle=TREND_NOTE + ". Period rate: cancellations are not linked to their original invoice",
+       sort=("c", "UCI Date", "Year Month", "Ascending"), filters=REPORTING_ONLY)
+ur.add("cancel-country", "clusteredBarChart", (796, CONTENT_Y, 460, 240),
+       {"Category": [("c", "UCI Country", "Country")], "Y": [("m", MU, "UCI Cancellation Rate % (Value)")]},
+       "Cancellation rate % (value) by invoice country", sort=("m", MU, "UCI Cancellation Rate % (Value)", "Descending"))
+ur.add("cancel-products", "tableEx", (24, 464, 1232, 244),
+       {"Values": [("c", "UCI Product", "Stock Code"), ("c", "UCI Product", "Description"),
+                   ("m", MU, "UCI Product Cancellations"), ("m", MU, "UCI Gross Product Sales", "Invoiced Value (gross product sales)"),
+                   ("m", MU, "UCI Cancellation Rate % (Value)"), ("m", MU, "UCI Cancellation Rate % (Lines)")]},
+       "Most cancelled products (GBP)", subtitle="Product-line values; rates can exceed 100% at product grain (no C-to-original link)",
+       sort=("m", MU, "UCI Product Cancellations", "Ascending"), objects=NO_TOTALS)
+PAGES.append(ur)
 
 # ---- Tooltip pages
 for tid, display, field in ((TOOLTIP_CATEGORY, "Tooltip - Category", ("Product", "Category")),

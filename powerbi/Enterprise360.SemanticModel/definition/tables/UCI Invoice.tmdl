@@ -1,0 +1,87 @@
+/// UCI fact at invoice grain (C-prefixed invoices = cancellations). Source of invoice/customer counts. GBP.
+table 'UCI Invoice'
+	lineageTag: 6baa798d-2fd3-5fe6-8c21-770af1cfc446
+
+	column Invoice
+		dataType: string
+		lineageTag: e259a840-5624-5cc7-aa1b-0e91478eb1e0
+		summarizeBy: none
+		sourceColumn: invoice
+
+		annotation SummarizationSetBy = User
+
+	column uci_customer_sk
+		dataType: string
+		isHidden
+		lineageTag: 5b344757-9651-5d77-9dee-fac1510978a6
+		summarizeBy: none
+		sourceColumn: uci_customer_sk
+
+		annotation SummarizationSetBy = User
+
+	column uci_country_sk
+		dataType: string
+		isHidden
+		lineageTag: a4226c0f-d485-5d7c-9524-61dc2594ac54
+		summarizeBy: none
+		sourceColumn: uci_country_sk
+
+		annotation SummarizationSetBy = User
+
+	column invoice_date_key
+		dataType: int64
+		isHidden
+		lineageTag: 2cfe55a4-3aaf-5eed-ba54-ec6929cccc68
+		summarizeBy: none
+		sourceColumn: invoice_date_key
+
+		annotation SummarizationSetBy = User
+
+	column has_customer
+		dataType: boolean
+		isHidden
+		lineageTag: 759948ea-9820-5e12-b2ec-07eed1864035
+		summarizeBy: none
+		sourceColumn: has_customer
+
+		annotation SummarizationSetBy = User
+
+	column is_cancellation
+		dataType: boolean
+		isHidden
+		lineageTag: 02136fba-b701-52b9-b04b-41cf833644d8
+		summarizeBy: none
+		sourceColumn: is_cancellation
+
+		annotation SummarizationSetBy = User
+
+	column product_line_count
+		dataType: int64
+		isHidden
+		lineageTag: d851f0c7-5ab1-5640-8f5f-beca34b06c2a
+		summarizeBy: none
+		sourceColumn: product_line_count
+
+		annotation SummarizationSetBy = User
+
+	column product_units
+		dataType: int64
+		isHidden
+		lineageTag: dbda2b75-5145-5edd-9e51-e16f1ef0cb58
+		summarizeBy: none
+		sourceColumn: product_units
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Invoice' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_fct_invoices"]}[Data],
+					Selected = Table.SelectColumns(Data, {"invoice", "uci_customer_sk", "uci_country_sk", "invoice_date_key", "has_customer", "is_cancellation", "product_line_count", "product_units"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"invoice", type text}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

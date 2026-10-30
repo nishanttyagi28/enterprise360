@@ -1,0 +1,60 @@
+/// uci_mart_customer_cohorts: first-purchase cohort month x months since first purchase. Standalone (no relationships).
+table 'UCI Cohort'
+	lineageTag: 48563a9c-f0a1-56bc-8681-39f0e1a760f3
+
+	column 'Cohort Month'
+		dataType: dateTime
+		formatString: yyyy-mm
+		lineageTag: 23475427-9200-5ce9-a098-69e16483f601
+		summarizeBy: none
+		sourceColumn: cohort_month
+
+		annotation SummarizationSetBy = User
+
+	column 'Months Since First Purchase'
+		dataType: int64
+		lineageTag: 9059295f-af03-541f-8367-cd23df73c877
+		summarizeBy: none
+		sourceColumn: months_since_first_purchase
+
+		annotation SummarizationSetBy = User
+
+	column 'Active Month'
+		dataType: dateTime
+		formatString: yyyy-mm
+		lineageTag: 1d7bb010-a009-555e-95da-276dc07005ca
+		summarizeBy: none
+		sourceColumn: active_month
+
+		annotation SummarizationSetBy = User
+
+	column cohort_customers
+		dataType: int64
+		isHidden
+		lineageTag: 23dd8f72-fe30-59cb-a0e2-d97b5265138e
+		summarizeBy: none
+		sourceColumn: cohort_customers
+
+		annotation SummarizationSetBy = User
+
+	column active_customers
+		dataType: int64
+		isHidden
+		lineageTag: 9e0cc083-ab3d-5645-a9e0-4681d6b4e6fb
+		summarizeBy: none
+		sourceColumn: active_customers
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Cohort' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUciMarts, Item = "uci_mart_customer_cohorts"]}[Data],
+					Selected = Table.SelectColumns(Data, {"cohort_month", "months_since_first_purchase", "active_month", "cohort_customers", "active_customers"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"cohort_month", type date}, {"active_month", type date}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

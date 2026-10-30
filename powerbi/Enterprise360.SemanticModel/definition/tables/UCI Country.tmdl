@@ -1,0 +1,49 @@
+/// UCI invoice country ('Unspecified' kept as its own member). UCI only (never Olist Geography).
+table 'UCI Country'
+	lineageTag: 282f05d1-9b50-5f63-bfa2-9a0a9a4fbeea
+
+	column uci_country_sk
+		dataType: string
+		isHidden
+		lineageTag: 0516dd8e-e915-5455-bf7f-7e81a82da7e6
+		summarizeBy: none
+		sourceColumn: uci_country_sk
+
+		annotation SummarizationSetBy = User
+
+	column Country
+		dataType: string
+		lineageTag: c1421011-b028-5616-b950-b1a9329df527
+		summarizeBy: none
+		sourceColumn: country
+
+		annotation SummarizationSetBy = User
+
+	column is_domestic
+		dataType: boolean
+		isHidden
+		lineageTag: 4f9e5cf9-699a-54f1-a68a-6efcfb36e90e
+		summarizeBy: none
+		sourceColumn: is_domestic
+
+		annotation SummarizationSetBy = User
+
+	column 'ISO Alpha-2'
+		dataType: string
+		lineageTag: 6676d010-88b4-5cbc-b567-fc6173dd428f
+		summarizeBy: none
+		sourceColumn: iso_alpha2
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Country' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_dim_country"]}[Data],
+					Selected = Table.SelectColumns(Data, {"uci_country_sk", "country", "is_domestic", "iso_alpha2"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

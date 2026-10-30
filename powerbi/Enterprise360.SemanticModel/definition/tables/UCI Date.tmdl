@@ -1,0 +1,101 @@
+/// UCI-only calendar (uci_dim_date, 2009-01-01..2012-12-31). Never shared with Olist. Trends filter is_reporting_month = TRUE (excludes partial 2011-12).
+table 'UCI Date'
+	lineageTag: 94114060-17db-5878-90bc-4f6a3dc8fbd9
+	dataCategory: Time
+
+	column date_key
+		dataType: int64
+		isHidden
+		lineageTag: d772faaf-d587-590a-8e3c-d0f1acb562c2
+		summarizeBy: none
+		sourceColumn: date_key
+
+		annotation SummarizationSetBy = User
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		lineageTag: b05732e1-32f8-56bb-bbd5-299e5328c82f
+		summarizeBy: none
+		sourceColumn: date_day
+
+		annotation SummarizationSetBy = User
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: b596cf17-7599-55b8-b27b-440bd6643c44
+		summarizeBy: none
+		sourceColumn: year
+
+		annotation SummarizationSetBy = User
+
+	column 'Month No'
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 535e40f7-5217-5c5d-b85a-9bd2a10069f7
+		summarizeBy: none
+		sourceColumn: month
+
+		annotation SummarizationSetBy = User
+
+	column Month
+		dataType: string
+		lineageTag: 5bf0c34e-7c7a-559b-8728-a92d5e9ea32b
+		summarizeBy: none
+		sourceColumn: month_name
+		sortByColumn: 'Month No'
+
+		annotation SummarizationSetBy = User
+
+	column 'Month Start'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		lineageTag: 477db5bb-5014-59a0-87a5-9c142c07869e
+		summarizeBy: none
+		sourceColumn: month_start
+
+		annotation SummarizationSetBy = User
+
+	column 'Year Month'
+		dataType: string
+		lineageTag: ec52446b-cd38-5c2a-84a1-cdf49c5dc9e6
+		summarizeBy: none
+		sourceColumn: year_month
+		sortByColumn: 'Month Start'
+
+		annotation SummarizationSetBy = User
+
+	column is_complete_month
+		dataType: boolean
+		isHidden
+		lineageTag: 7db79cf6-5ee5-5702-9019-a5507ad3c2e8
+		summarizeBy: none
+		sourceColumn: is_complete_month
+
+		annotation SummarizationSetBy = User
+
+	column is_reporting_month
+		dataType: boolean
+		isHidden
+		lineageTag: 032a2dc8-bab2-5ec2-ad45-04a04d7aa9f7
+		summarizeBy: none
+		sourceColumn: is_reporting_month
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Date' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_dim_date"]}[Data],
+					Selected = Table.SelectColumns(Data, {"date_key", "date_day", "year", "month", "month_name", "month_start", "year_month", "is_complete_month", "is_reporting_month"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"date_day", type date}, {"month_start", type date}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

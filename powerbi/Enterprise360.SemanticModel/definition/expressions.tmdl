@@ -15,3 +15,15 @@ expression PgSchema = "core" meta [IsParameterQuery = true, Type = "Text", IsPar
 	lineageTag: eb5fe892-490a-5eb7-a731-36169b199f02
 
 	annotation PBI_ResultType = Text
+
+/// UCI Online Retail II core facts/dimensions (dbt +schema: uci_core).
+expression PgSchemaUci = "uci_core" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: 933d5765-bb6c-5ffa-a681-a130edbcd82d
+
+	annotation PBI_ResultType = Text
+
+/// UCI Online Retail II marts (cohorts, RFM; dbt +schema: uci_marts).
+expression PgSchemaUciMarts = "uci_marts" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: 98f1342d-da39-5a50-9340-23eeb24ea8f8
+
+	annotation PBI_ResultType = Text

@@ -1,0 +1,48 @@
+/// UCI stock code with most frequent description. UCI only (never Olist Product).
+table 'UCI Product'
+	lineageTag: 5b34d6f7-442d-5df1-8e11-9ba1b5363dda
+
+	column uci_product_sk
+		dataType: string
+		isHidden
+		lineageTag: e66ba60c-4821-59a1-ba3b-9fb749daf086
+		summarizeBy: none
+		sourceColumn: uci_product_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Stock Code'
+		dataType: string
+		lineageTag: fe28b577-be64-521c-afa4-e8144e1dbe8f
+		summarizeBy: none
+		sourceColumn: stock_code
+
+		annotation SummarizationSetBy = User
+
+	column Description
+		dataType: string
+		lineageTag: 0bff7335-9b89-552e-9421-36fd5dd2398f
+		summarizeBy: none
+		sourceColumn: description
+
+		annotation SummarizationSetBy = User
+
+	column 'Primary Line Type'
+		dataType: string
+		lineageTag: c18b3244-c5e3-5349-8c59-05f023652d66
+		summarizeBy: none
+		sourceColumn: primary_line_type
+
+		annotation SummarizationSetBy = User
+
+	partition 'UCI Product' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaUci, Item = "uci_dim_product"]}[Data],
+					Selected = Table.SelectColumns(Data, {"uci_product_sk", "stock_code", "description", "primary_line_type"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

@@ -1,4 +1,4 @@
-/// Home table for all explicit measures. Names follow docs/kpi-catalog.md; descriptions carry KPI ids.
+/// Home table for all explicit Olist measures (BRL). Names follow docs/kpi-catalog.md; descriptions carry KPI ids.
 table _Measures
 	lineageTag: bc9655a5-5075-520c-85af-3f61c5256843
 
