@@ -31,6 +31,7 @@ vars:
   # UCI models exist -> enable KPI & Quality's gated tests in tests/uci
   uci_models_built: true
   funnel_models_built: true     # enables KPI & Quality tests/funnel (DE models exist)
+  forecast_models_built: true   # enables KPI & Quality tests/forecast (DE marts exist)
   # Brazil bounding box used to discard impossible geolocation points (STTM §2.9)
   brazil_lat_min: -34.0
   brazil_lat_max: 6.0

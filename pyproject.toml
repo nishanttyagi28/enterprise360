@@ -19,13 +19,18 @@ dependencies = [
   "dbt-core>=1.8,<1.11",
   "dbt-postgres>=1.8,<1.10",
   "prefect>=3.0,<4",
+  # analytics (forecast) + reporting (MIS export)
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "statsmodels>=0.14,<0.15",
+  "openpyxl>=3.1,<4",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.6,<1", "mypy>=1.10,<2", "pyyaml>=6,<7", "duckdb>=1.0,<3"]
+dev = ["pytest>=8,<9", "ruff>=0.6,<1", "mypy>=1.10,<2", "pyyaml>=6,<7", "duckdb>=1.0,<3", "pandas-stubs>=2.2,<3"]
 
 [tool.setuptools.packages.find]
-include = ["ingestion*", "orchestration*"]
+include = ["ingestion*", "orchestration*", "analytics*", "reporting*"]
 
 [tool.ruff]
 line-length = 110
@@ -47,11 +52,11 @@ ignore = ["S101", "S608"]  # asserts in tests; S608 = SQL built only from intern
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["ingestion", "orchestration"]
+packages = ["ingestion", "orchestration", "analytics", "reporting"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["prefect.*", "dbt.*"]
+module = ["prefect.*", "dbt.*", "statsmodels.*", "openpyxl.*"]
 ignore_missing_imports = true
 
 # pytest config lives in pytest.ini (KPI & Quality-owned)

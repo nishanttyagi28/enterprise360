@@ -1,0 +1,24 @@
+version: 2
+sources:
+  - name: analytics
+    description: Written by `python -m analytics.forecast` (one row set per run_id; history kept). DDL database/ddl/040.
+    schema: analytics
+    tables:
+      - name: forecast_runs
+        columns:
+          - name: run_id
+            tests: [unique, not_null]
+      - name: forecast_monthly
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [run_id, forecast_month]}
+        columns:
+          - name: run_id
+            tests: [{relationships: {to: "source('analytics', 'forecast_runs')", field: run_id}}]
+          - name: split
+            tests: [{accepted_values: {values: [train, validation, test, forecast]}}]
+      - name: forecast_anomalies
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [run_id, anomaly_date]}
+      - name: forecast_backtest
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [run_id, series, model, split]}

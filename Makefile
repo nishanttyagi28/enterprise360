@@ -5,7 +5,7 @@ OLIST_DIR ?=
 UCI_DIR   ?=
 FUNNEL_DIR ?=
 
-.PHONY: setup db-up db-init ingest ingest-olist ingest-uci ingest-funnel ingest-fixtures dbt-deps dbt-build dbt-docs test test-unit lint typecheck flow clean
+.PHONY: setup db-up db-init ingest ingest-olist ingest-uci ingest-funnel ingest-fixtures dbt-deps dbt-build dbt-docs test test-unit lint typecheck flow forecast export clean
 
 setup:            ## create venv + install project with dev extras
 	python3.12 -m venv .venv
@@ -52,14 +52,20 @@ test-unit:
 	$(PY) -m pytest -m "not integration"
 
 lint:
-	$(PY) -m ruff check ingestion orchestration tests
-	$(PY) -m ruff format --check ingestion orchestration
+	$(PY) -m ruff check ingestion orchestration analytics reporting tests
+	$(PY) -m ruff format --check ingestion orchestration analytics reporting
 
 typecheck:
 	$(PY) -m mypy
 
-flow:             ## Prefect flow: init-db -> ingest olist + uci + funnel (independent) -> dbt deps/freshness/build
+flow:             ## Prefect flow: init-db -> ingest olist + uci + funnel (independent) -> dbt deps/freshness/build -> forecast
 	$(PY) -m orchestration.flow
+
+forecast:         ## forecast + anomalies on monthly GMV/orders -> analytics.forecast_* + marts.mart_gmv_*
+	$(PY) -m analytics.forecast
+
+export:           ## MIS Excel workbook -> reports/enterprise360_mis_YYYYMMDD.xlsx
+	$(PY) -m reporting.export_mis
 
 clean:
 	$(DBT) clean

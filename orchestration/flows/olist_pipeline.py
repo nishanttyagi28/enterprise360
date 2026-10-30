@@ -1,4 +1,5 @@
-"""Prefect flow: init-db -> ingest Olist / UCI / Funnel (independent tasks) -> dbt deps/freshness/build.
+"""Prefect flow: init-db -> ingest Olist / UCI / Funnel (independent tasks) -> dbt deps/freshness/build
+-> forecast (analytics.forecast) -> dbt build of the forecast marts.
 
 The two ingest tasks are independent: a UCI failure is logged and does not stop Olist ingestion (or vice
 versa). One ``dbt build`` then runs over whatever loaded; the flow is marked failed at the end if any
@@ -14,6 +15,8 @@ from typing import Literal
 
 from prefect import flow, get_run_logger, task
 
+from analytics.forecast import FORECAST_MARTS
+from analytics.forecast import run as run_forecast_job
 from ingestion.config import Settings, get_settings
 from ingestion.loaders import LoadResult, LoadStatus
 from ingestion.log_config import configure_logging
@@ -58,6 +61,12 @@ def dbt_task(*args: str) -> None:
     run_dbt(list(args))
 
 
+@task(retries=1, retry_delay_seconds=10)
+def forecast_task() -> str:
+    """Forecast + anomaly flags on monthly GMV/orders (needs the marts from dbt build)."""
+    return str(run_forecast_job(get_settings()))
+
+
 @flow(name="olist-pipeline", log_prints=True)
 def olist_pipeline(
     source_dir: Path | None = None,
@@ -66,6 +75,7 @@ def olist_pipeline(
     domain: Domain = "all",
     uci_source_dir: Path | None = None,
     funnel_source_dir: Path | None = None,
+    skip_forecast: bool = False,
 ) -> dict[str, dict[str, int] | str]:
     """Folder overrides: ``source_dir`` (Olist), ``uci_source_dir``, ``funnel_source_dir``."""
     load_env()
@@ -88,6 +98,9 @@ def olist_pipeline(
     dbt_task("deps")
     dbt_task("source", "freshness")
     dbt_task("build", *(["--full-refresh"] if full_refresh else []))
+    if not skip_forecast:  # after the full build: it reads marts.mart_business_overview_monthly
+        logger.info("forecast run_id %s", forecast_task())
+        dbt_task("build", "--select", *FORECAST_MARTS.split())
     failed = [d for d, v in outcome.items() if isinstance(v, str)]
     if failed:
         raise RuntimeError(f"ingestion failed for: {', '.join(failed)} (dbt build ran on the rest)")

@@ -1,5 +1,5 @@
 <#
-.SYNOPSIS  Ingest (Olist / UCI / Marketing Funnel) -> dbt freshness -> ONE dbt build (models + tests + DQ log). Optionally pytest/lint.
+.SYNOPSIS  Ingest (Olist / UCI / Marketing Funnel) -> dbt freshness -> ONE dbt build (models + tests + DQ log) -> forecast. Optionally pytest/lint, MIS export.
 .DESCRIPTION
   -Domain all (default) ingests olist, uci and funnel independently: if one domain's ingestion fails the other
   still loads, dbt build still runs, and the script exits non-zero at the end naming the failed domain.
@@ -9,6 +9,7 @@
 .EXAMPLE   .\scripts\run.ps1 -SourceDir tests\fixtures\olist -UciSourceDir tests\fixtures\uci
 .EXAMPLE   .\scripts\run.ps1 -FullRefresh -Test           # rebuild incrementals, then pytest + ruff + mypy
 .EXAMPLE   .\scripts\run.ps1 -Prefect                     # same pipeline as a Prefect flow
+.EXAMPLE   .\scripts\run.ps1 -Export                      # ... then reports\enterprise360_mis_YYYYMMDD.xlsx
 #>
 param(
     [ValidateSet('olist', 'uci', 'funnel', 'all')]
@@ -19,7 +20,9 @@ param(
     [switch]$Force,
     [switch]$FullRefresh,
     [switch]$Test,
-    [switch]$Prefect
+    [switch]$Prefect,
+    [switch]$SkipForecast,    # skip python -m analytics.forecast after dbt build
+    [switch]$Export           # write reports\enterprise360_mis_YYYYMMDD.xlsx at the end
 )
 . "$PSScriptRoot\_common.ps1"
 Set-Location $RepoRoot
@@ -36,6 +39,7 @@ if ($Prefect) {
     if ($FunnelSourceDir) { $flowArgs += @('--funnel-source-dir', $FunnelSourceDir) }
     if ($Force) { $flowArgs += '--force' }
     if ($FullRefresh) { $flowArgs += '--full-refresh' }
+    if ($SkipForecast) { $flowArgs += '--skip-forecast' }
     Invoke-Step 'Prefect flow olist-pipeline' { & $VenvPython -m orchestration.flow @flowArgs }
 } else {
     Invoke-Step 'Apply DDL' { & $VenvPython -m ingestion init-db }
@@ -55,11 +59,19 @@ if ($Prefect) {
     $buildArgs = @('build')
     if ($FullRefresh) { $buildArgs += '--full-refresh' }
     Invoke-Step 'dbt build' { & $VenvPython -m orchestration.dbt_runner @buildArgs }
+    if (-not $SkipForecast) {
+        # Reads marts.mart_business_overview_monthly, writes analytics.forecast_*, rebuilds marts.mart_gmv_*
+        Invoke-Step 'Forecast + anomalies' { & $VenvPython -m analytics.forecast }
+    }
+}
+
+if ($Export) {
+    Invoke-Step 'MIS Excel export' { & $VenvPython -m reporting.export_mis }
 }
 
 if ($Test) {
     Invoke-Step 'pytest' { & $VenvPython -m pytest }
-    Invoke-Step 'ruff' { & $VenvPython -m ruff check ingestion orchestration tests }
+    Invoke-Step 'ruff' { & $VenvPython -m ruff check ingestion orchestration analytics reporting tests }
     Invoke-Step 'mypy' { & $VenvPython -m mypy }
 }
 if ($failed.Count -gt 0) { throw "Ingestion failed for: $($failed -join ', ') (dbt build ran on the rest)." }

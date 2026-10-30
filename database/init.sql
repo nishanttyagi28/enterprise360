@@ -4,3 +4,4 @@
 \ir ddl/010_raw_olist.sql
 \ir ddl/020_raw_uci.sql
 \ir ddl/030_raw_funnel.sql
+\ir ddl/040_analytics_forecast.sql

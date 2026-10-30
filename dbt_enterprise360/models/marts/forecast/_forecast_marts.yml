@@ -1,0 +1,34 @@
+version: 2
+models:
+  - name: mart_gmv_forecast
+    description: >-
+      Monthly Olist GMV (item price only, not revenue) + orders: actual, fitted (train), forecast, baseline,
+      95% conformal intervals, split, training_cutoff, selected_model + selection_reason, is_gmv_anomaly. Latest forecast run only. Method and limits: docs/forecasting.md.
+    columns:
+      - name: forecast_month
+        tests: [unique, not_null]
+      - name: split
+        tests: [not_null, {accepted_values: {values: [train, validation, test, forecast]}}]
+      - name: training_cutoff
+        tests: [not_null]
+      - name: forecast_gmv
+        description: Null on train rows (see fitted_gmv).
+      - name: fitted_gmv
+        description: In-sample one-step fit, train rows only.
+      - name: selected_model
+        tests: [not_null]
+      - name: interval_method
+        description: conformal_abs_cv = per-horizon conformal half-width from rolling-origin CV absolute errors.
+      - name: month_date_key
+        tests: [{relationships: {to: "ref('dim_date')", field: date_key}}]
+  - name: mart_gmv_anomalies
+    description: One row per evaluated month (anomaly_date = month start) with robust-z flags (> 3.5).
+    columns:
+      - name: anomaly_date
+        tests: [unique, not_null]
+      - name: gmv_robust_z
+        tests: [not_null, {dbt_utils.accepted_range: {min_value: 0}}]
+  - name: mart_gmv_forecast_backtest
+    description: MAE / sMAPE / MAPE per series x model x split (validation, test) for model and naive baseline.
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [series, model, split]}
