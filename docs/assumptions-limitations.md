@@ -30,7 +30,8 @@ Dataset in scope: **Olist Brazilian E-Commerce Public Dataset** (Kaggle `olistbr
 - L-F3 Conversion is by first-contact cohort (overall 10.53%). Deal capture starts Dec 2017, so 2017 cohorts look low (0.84%–5.5%) partly by data artefact; 2018 cohorts are right-censored. Maturity window locked at 210 days (observed p95 days-to-close; p90 162): cohort mature when month end + 210 days <= max(won_date) (2018-11-14), so Apr and May 2018 cohorts are immature. mart_funnel_monthly must expose converted_leads_in_cohort, mqls, is_cohort_mature.
 - L-F4 Median days to close = 14 (841 deals; 1 negative duration of -2 days excluded, WARN). Non-additive; never average.
 - L-F5 Sparse columns in closed deals: has_company 92.5% null, has_gtin 92.4%, average_stock 92.2%, declared_product_catalog_size 91.8%, lead_behaviour_profile 21.0%. MQL origin 0.75% null plus 1,099 'unknown'.
-- L-F6 dbt models fct_leads, fct_closed_deals, dim_lead_origin, mart_funnel_monthly are announced by DE but not in repo; tests gated by var funnel_models_built (default false).
+- L-F6 DE models core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed (bb277c9) and built; funnel_models_built=true (set by DE). KPI_FUNNEL_* sources CONFIRMED.
+- L-F7 Funnel measures are not restricted to Olist reporting months (wins run to 2018-11-14). The time-to-close breakdown covers all dates (mart has no date grain) and totals 841 (negative bucket excluded).
 
 ## GMV forecast / anomaly (exploratory)
 - L-G1 Forecasts and anomaly flags are exploratory and model-based; GMV only (item price), never revenue. Intervals are not guarantees.

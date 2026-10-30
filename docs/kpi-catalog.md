@@ -32,10 +32,10 @@ Olist GMV = SUM(item_price), freight excluded. UCI Gross Sales = invoiced value.
 | KPI_DQ_SCORE | Data Quality Score | SUPPORTED | 1.2.0 | `Σ(weight where status='pass') / Σ(weight)` | run_id | core.dq_run_summary.dq_score | [DQ Score %] | Data Platform Lead |
 | KPI_RECON_VARIANCE | Reconciliation Variance | SUPPORTED | 1.1.0 | `mart_value − source_value` | kpi × run | core.dq_results | [Reconciliation Variance] | Data Platform Lead |
 | KPI_SELLER_HANDOVER_OTD | Seller Handover On-Time Rate | PARTIAL | 1.1.0 | `count(items where delivered_carrier_at <= shipping_limit_at) / count(items with both timestamps)` | order item | fct_order_items.shipping_limit_at joined to fct_deliveries.delivered_carrier_at on order_id (no fan-out, deliveries is one row per order) | [Seller Handover On-Time %] | Head of Operations |
-| KPI_FUNNEL_MQLS | Marketing Qualified Leads (MQLs) | SUPPORTED | 1.0.0 | `COUNT(DISTINCT fct_leads.mql_id)` | lead (mql_id) | fct_leads.mql_id (PROPOSED) | [MQLs] (proposed; confirm with Power BI) | Head of Marketing |
-| KPI_FUNNEL_CLOSED_DEALS | Closed Deals | SUPPORTED | 1.0.0 | `COUNT(DISTINCT fct_closed_deals.mql_id)` | closed deal (mql_id) | fct_closed_deals.mql_id (PROPOSED) | [Closed Deals] (proposed; confirm with Power BI) | Head of Marketing |
-| KPI_FUNNEL_CONVERSION_RATE | Lead-to-Deal Conversion % (first-contact cohort) | PARTIAL | 1.0.1 | `mart_funnel_monthly.converted_leads_in_cohort / mart_funnel_monthly.mqls = COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)` | first-contact month cohort | mart_funnel_monthly.conversion_rate (PROPOSED) | [Lead Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]) on first-contact date (proposed) | Head of Marketing |
-| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | Median Days to Close | SUPPORTED | 1.0.0 | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY won_date::date - first_contact_date) WHERE matched AND duration >= 0` | closed deal | fct_closed_deals.days_to_close (PROPOSED) | [Median Days to Close] = MEDIANX over deal rows (proposed) | Head of Marketing |
+| KPI_FUNNEL_MQLS | Marketing Qualified Leads (MQLs) | SUPPORTED | 1.0.1 | `COUNT(DISTINCT fct_leads.mql_id)` | lead (mql_id) | core.fct_leads.mql_id | [MQLs] | Head of Marketing |
+| KPI_FUNNEL_CLOSED_DEALS | Closed Deals | SUPPORTED | 1.0.1 | `COUNT(DISTINCT fct_closed_deals.mql_id)` | closed deal (mql_id) | core.fct_closed_deals.mql_id | [Closed Deals] | Head of Marketing |
+| KPI_FUNNEL_CONVERSION_RATE | Lead-to-Deal Conversion % (first-contact cohort) | PARTIAL | 1.0.2 | `mart_funnel_monthly.converted_leads_in_cohort / mart_funnel_monthly.mqls = COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)` | first-contact month cohort | marts.mart_funnel_monthly (mqls, converted_leads_in_cohort, conversion_rate, is_cohort_mature); PBI computes from core.fct_leads rows | [Lead-to-Deal Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]); cohort via Lead[first_contact_date_key] -> Date | Head of Marketing |
+| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | Median Days to Close | SUPPORTED | 1.0.1 | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY won_date::date - first_contact_date) WHERE matched AND duration >= 0` | closed deal | core.fct_closed_deals.days_to_close | [Median Days to Close] = MEDIANX over deal rows | Head of Marketing |
 | KPI_GMV_FORECAST | GMV Forecast (exploratory) | PARTIAL | 1.0.0 | `forecast_gmv_t = model(GMV history up to training cutoff); compare vs seasonal-naive / naive-last-value baseline` | forecast date x horizon (monthly or daily per DE) | mart_gmv_forecast (PROPOSED) | [GMV Forecast] (proposed; exploratory) | Head of Sales |
 | KPI_GMV_ANOMALY_FLAG | GMV Anomaly Flag (exploratory) | PARTIAL | 1.0.0 | `flag = \|GMV_d − expected_d\| / (1.4826 × MAD(residuals)) > k` | day | mart_gmv_anomalies (PROPOSED) | [GMV Anomaly Days] (proposed; exploratory) | Head of Sales |
 
@@ -66,13 +66,15 @@ Approved helper measures; not KPIs themselves.
 | KPI_DQ_SCORE | [Failing Rows] | breakdown | Rows returned by failing/warning checks |
 | KPI_DQ_SCORE | [DQ Status Colour] | formatting | Conditional-format helper; hidden; not a KPI |
 | KPI_SELLER_HANDOVER_OTD | [Handover Missing Timestamp] | dq_exclusion | Items missing delivered_carrier_at or shipping_limit_at; excluded |
-| KPI_FUNNEL_MQLS | [MQLs by Origin] | breakdown | MQLs split by origin; 60 MQLs (0.75%) have null origin and 1,099 are 'unknown' — show both, do not merge silently |
-| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Business Segment] | breakdown | 33 segments; 0.12% null |
-| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Lead Type] | breakdown | 0.71% null lead_type |
-| KPI_FUNNEL_CLOSED_DEALS | [Unmatched Closed Deals] | dq_exclusion | deals whose mql_id is not in fct_leads (0 at 2026-10-31) |
-| KPI_FUNNEL_CONVERSION_RATE | [Converted Leads in Cohort] | breakdown | numerator, attributed to the lead's first_contact month, not won month |
-| KPI_FUNNEL_CONVERSION_RATE | [Cohort Is Mature] (is_cohort_mature, 210-day window) | formatting | maturity flag; grey out or exclude immature cohorts |
-| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | [Negative Duration Deals] | dq_exclusion | count of deals with won_date < first_contact_date (1) |
+| KPI_FUNNEL_MQLS | [MQLs by Origin] | breakdown | MQLs by Lead Origin; 'not_recorded' (null origin, 60) and 'unknown' (source value, 1,099) kept separate, never merged |
+| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Business Segment] | breakdown | 33 segments; 1 null (0.12%) |
+| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Lead Type] | breakdown | 6 null lead_type (0.71%) |
+| KPI_FUNNEL_CLOSED_DEALS | [Unmatched Closed Deals] | dq_exclusion | closed deals whose mql_id is not in core.fct_leads (0 at 2026-10-31) |
+| KPI_FUNNEL_CONVERSION_RATE | [Converted Leads in Cohort] | breakdown | numerator: MQLs in the first-contact cohort with a closed deal at any later date (Lead[is_closed]); attributed to first-contact month, not won month |
+| KPI_FUNNEL_CONVERSION_RATE | [Cohort Is Mature] | formatting | 1/0 flag: 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0); over a multi-month selection reflects the latest cohort |
+| KPI_FUNNEL_CONVERSION_RATE | [Cohort Maturity Colour] | formatting | hidden helper colouring immature cohorts (from [Cohort Is Mature]); not displayed as a value |
+| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | [Negative Duration Deals] | dq_exclusion | deals with won_date before first_contact_date (1), excluded from [Median Days to Close] |
+| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | [Closed Deals by Days-to-Close Bucket] | breakdown | closed deals per days-to-close bucket from marts.mart_funnel_time_to_close, negative bucket excluded (buckets total 841: 0-7 283, 8-14 144, 15-30 127, 31-60 92, 61-90 45, 91-180 83, 181+ 67). Source mart has no date grain: covers ALL dates and does not respond to date slicers. Approved ONLY if the visual is labelled 'All dates' and notes that date slicers do not apply. |
 | KPI_GMV_FORECAST | [GMV Forecast Lower/Upper] | formatting | model-based prediction interval band |
 | KPI_GMV_ANOMALY_FLAG | [GMV Anomaly Days] | breakdown | count of flagged days in context |
 
@@ -81,6 +83,12 @@ Approved helper measures; not KPIs themselves.
 Applies to: KPI_ORDERS, KPI_OTD_RATE, KPI_DELIVERY_DAYS, KPI_REVIEW_SCORE, KPI_APPROVAL_HOURS.
 
 Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg Delivery Days, Avg Review Score, Avg Approval Hours) count orders containing a matching line. Multi-category or multi-seller orders count once per category or seller, so totals across categories/sellers are not additive and none are shown implying additivity. Review score by category is 'Avg Review Score of orders containing category', not a product rating.
+
+### Marketing funnel measures are not restricted to Olist reporting months
+
+Applies to: KPI_FUNNEL_MQLS, KPI_FUNNEL_CLOSED_DEALS, KPI_FUNNEL_CONVERSION_RATE, KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE.
+
+The funnel is a separate Olist dataset whose wins run until 2018-11-14, beyond the order-data reporting months (2017-01..2018-08). Funnel measures must NOT apply dim_date.is_reporting_month; deals won Sep–Nov 2018 are kept. The page must say so in a subtitle. MQLs are dated by first_contact_date and deals by won_date on the shared Date table.
 
 ### Definitions and validation rules (olist)
 

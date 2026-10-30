@@ -21,6 +21,14 @@ filter_behaviour_notes:
   note: Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg Delivery Days, Avg Review Score, Avg Approval Hours) count orders containing a matching line. Multi-category or multi-seller
     orders count once per category or seller, so totals across categories/sellers are not additive and none are shown implying additivity. Review score by category is 'Avg Review Score of orders containing
     category', not a product rating.
+- id: FBN_FUNNEL_NOT_REPORTING_MONTHS
+  title: Marketing funnel measures are not restricted to Olist reporting months
+  applies_to:
+  - KPI_FUNNEL_MQLS
+  - KPI_FUNNEL_CLOSED_DEALS
+  - KPI_FUNNEL_CONVERSION_RATE
+  - KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+  note: The funnel is a separate Olist dataset whose wins run until 2018-11-14, beyond the order-data reporting months (2017-01..2018-08). Funnel measures must NOT apply dim_date.is_reporting_month; deals won Sep–Nov 2018 are kept. The page must say so in a subtitle. MQLs are dated by first_contact_date and deals by won_date on the shared Date table.
 kpis:
 - id: KPI_GMV
   name: Gross Merchandise Value
@@ -1799,12 +1807,12 @@ kpis:
   - olist_marketing_qualified_leads.mql_id
   - olist_marketing_qualified_leads.first_contact_date
   - olist_marketing_qualified_leads.origin
-  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  source_tag: 'CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)'
   fact_dependencies:
-  - fct_leads (PROPOSED, pending DE)
+  - fct_leads
   dimension_dependencies:
   - dim_date
-  - dim_lead_origin (PROPOSED, pending DE)
+  - dim_lead_origin
   grain: 'lead (mql_id)'
   refresh: daily batch after ingestion + dbt build (static historical dataset)
   owner: Head of Marketing
@@ -1817,20 +1825,25 @@ kpis:
   supporting_measures:
   - measure: '[MQLs by Origin]'
     kind: breakdown
-    purpose: "MQLs split by origin; 60 MQLs (0.75%) have null origin and 1,099 are 'unknown' — show both, do not merge silently"
+    purpose: "MQLs by Lead Origin; 'not_recorded' (null origin, 60) and 'unknown' (source value, 1,099) kept separate, never merged"
   caveats:
   - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
-  version: 1.0.0
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
     pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED against DE models (bb277c9); supporting measures aligned to Power BI (dabfa3f, KPI_ParentKpi)
+    pr: TBD
   implementations:
-    dbt: 'fct_leads.mql_id (PROPOSED)'
+    dbt: core.fct_leads.mql_id
     sql: (none; dbt authoritative once built)
-    power_bi_dax: '[MQLs] (proposed; confirm with Power BI)'
+    power_bi_dax: '[MQLs]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist
 - id: KPI_FUNNEL_CLOSED_DEALS
@@ -1847,9 +1860,9 @@ kpis:
   - olist_closed_deals.won_date
   - olist_closed_deals.business_segment
   - olist_closed_deals.lead_type
-  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  source_tag: 'CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)'
   fact_dependencies:
-  - fct_closed_deals (PROPOSED, pending DE)
+  - fct_closed_deals
   dimension_dependencies:
   - dim_date
   grain: 'closed deal (mql_id)'
@@ -1864,28 +1877,33 @@ kpis:
   supporting_measures:
   - measure: '[Closed Deals by Business Segment]'
     kind: breakdown
-    purpose: '33 segments; 0.12% null'
+    purpose: '33 segments; 1 null (0.12%)'
   - measure: '[Closed Deals by Lead Type]'
     kind: breakdown
-    purpose: '0.71% null lead_type'
+    purpose: '6 null lead_type (0.71%)'
   - measure: '[Unmatched Closed Deals]'
     kind: dq_exclusion
-    purpose: 'deals whose mql_id is not in fct_leads (0 at 2026-10-31)'
+    purpose: 'closed deals whose mql_id is not in core.fct_leads (0 at 2026-10-31)'
   caveats:
   - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
   - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
   - 'Deals dated by won_date are a different time axis from MQLs by first_contact_date; deals-in-month / MQLs-in-month is NOT a conversion rate.'
-  version: 1.0.0
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
     pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED against DE models (bb277c9); supporting measures aligned to Power BI (dabfa3f, KPI_ParentKpi)
+    pr: TBD
   implementations:
-    dbt: 'fct_closed_deals.mql_id (PROPOSED)'
+    dbt: core.fct_closed_deals.mql_id
     sql: (none; dbt authoritative once built)
-    power_bi_dax: '[Closed Deals] (proposed; confirm with Power BI)'
+    power_bi_dax: '[Closed Deals]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist
 - id: KPI_FUNNEL_CONVERSION_RATE
@@ -1901,14 +1919,14 @@ kpis:
   - olist_marketing_qualified_leads.mql_id
   - olist_marketing_qualified_leads.first_contact_date
   - olist_closed_deals.mql_id
-  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  source_tag: 'CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)'
   fact_dependencies:
-  - fct_leads (PROPOSED)
-  - fct_closed_deals (PROPOSED)
-  - mart_funnel_monthly (PROPOSED, pending DE)
+  - fct_leads
+  - fct_closed_deals
+  - mart_funnel_monthly
   dimension_dependencies:
   - dim_date
-  - dim_lead_origin (PROPOSED)
+  - dim_lead_origin
   grain: 'first-contact month cohort'
   refresh: daily batch after ingestion + dbt build (static historical dataset)
   owner: Head of Marketing
@@ -1923,17 +1941,20 @@ kpis:
   supporting_measures:
   - measure: '[Converted Leads in Cohort]'
     kind: breakdown
-    purpose: "numerator, attributed to the lead's first_contact month, not won month"
-  - measure: '[Cohort Is Mature] (is_cohort_mature, 210-day window)'
+    purpose: 'numerator: MQLs in the first-contact cohort with a closed deal at any later date (Lead[is_closed]); attributed to first-contact month, not won month'
+  - measure: '[Cohort Is Mature]'
     kind: formatting
-    purpose: 'maturity flag; grey out or exclude immature cohorts'
+    purpose: '1/0 flag: 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0); over a multi-month selection reflects the latest cohort'
+  - measure: '[Cohort Maturity Colour]'
+    kind: formatting
+    purpose: 'hidden helper colouring immature cohorts (from [Cohort Is Mature]); not displayed as a value'
   caveats:
   - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
   - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
   - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 210 days (observed p95 of first_contact->won days; p75 55, p90 162, max 427), locked by owner. With max won_date 2018-11-14, Apr and May 2018 cohorts are immature — report mature cohorts only or show the flag.'
   - 'Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.'
   - 'Ratio of sums per cohort; never average monthly rates across cohorts or origins.'
-  version: 1.0.1
+  version: 1.0.2
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
@@ -1945,10 +1966,15 @@ kpis:
     author: KPI & Quality
     change: maturity window locked at 210 days (p95, was 162/p90); Apr–May 2018 immature; mart must expose converted_leads_in_cohort, mqls, is_cohort_mature
     pr: TBD
+  - version: 1.0.2
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED against DE models (bb277c9); supporting measures aligned to Power BI (dabfa3f, KPI_ParentKpi); PBI measure name [Lead-to-Deal Conversion %]
+    pr: TBD
   implementations:
-    dbt: 'mart_funnel_monthly.conversion_rate (PROPOSED)'
+    dbt: 'marts.mart_funnel_monthly (mqls, converted_leads_in_cohort, conversion_rate, is_cohort_mature); PBI computes from core.fct_leads rows'
     sql: (none; dbt authoritative once built)
-    power_bi_dax: '[Lead Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]) on first-contact date (proposed)'
+    power_bi_dax: '[Lead-to-Deal Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]); cohort via Lead[first_contact_date_key] -> Date'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist
 - id: KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
@@ -1963,10 +1989,10 @@ kpis:
   source:
   - olist_marketing_qualified_leads.first_contact_date
   - olist_closed_deals.won_date
-  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  source_tag: 'CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)'
   fact_dependencies:
-  - fct_closed_deals (PROPOSED)
-  - fct_leads (PROPOSED)
+  - fct_closed_deals
+  - fct_leads
   dimension_dependencies:
   - dim_date
   grain: 'closed deal'
@@ -1981,21 +2007,31 @@ kpis:
   supporting_measures:
   - measure: '[Negative Duration Deals]'
     kind: dq_exclusion
-    purpose: 'count of deals with won_date < first_contact_date (1)'
+    purpose: 'deals with won_date before first_contact_date (1), excluded from [Median Days to Close]'
+  - measure: '[Closed Deals by Days-to-Close Bucket]'
+    kind: breakdown
+    purpose: "closed deals per days-to-close bucket from marts.mart_funnel_time_to_close, negative bucket excluded (buckets total 841: 0-7 283, 8-14 144, 15-30 127, 31-60 92, 61-90 45, 91-180 83, 181+ 67). Source mart has no date grain: covers ALL dates and does not respond to date slicers. Approved ONLY if the visual is labelled 'All dates' and notes that date slicers do not apply."
   caveats:
+  - '[Closed Deals by Days-to-Close Bucket] comes from marts.mart_funnel_time_to_close, which has no date grain: all dates, unaffected by date slicers; approved only when labelled so on the page.'
+  - 'Under a Date slicer this KPI filters deals by won_date (not first-contact cohort).'
   - 'Median is non-additive: recompute at every filter level from rows, never average monthly or segment medians.'
   - 'Right-skewed (p90 162, max 427 days); also show p75/p90 if needed.'
-  version: 1.0.0
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
     pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED against DE models (bb277c9); supporting measures aligned to Power BI (dabfa3f, KPI_ParentKpi); approved [Closed Deals by Days-to-Close Bucket] breakdown (all dates)
+    pr: TBD
   implementations:
-    dbt: 'fct_closed_deals.days_to_close (PROPOSED)'
+    dbt: core.fct_closed_deals.days_to_close
     sql: (none; dbt authoritative once built)
-    power_bi_dax: '[Median Days to Close] = MEDIANX over deal rows (proposed)'
+    power_bi_dax: '[Median Days to Close] = MEDIANX over deal rows'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist
 - id: KPI_GMV_FORECAST
