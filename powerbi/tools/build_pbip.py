@@ -349,6 +349,15 @@ FC_SRC = {  # model column -> marts source column
                       "orders_robust_z": "orders_robust_z", "is_orders_anomaly": "is_orders_anomaly",
                       "z_threshold": "z_threshold"},
 }
+# Upcoming DE columns (not in the warehouse on 2026-10-31): flip FC_SHOW_METHOD to True once they exist.
+FC_SHOW_METHOD = False
+FC_OPTIONAL_SRC = {"GMV Forecast": {"Interval Method": "interval_method", "Selected Model": "selected_model"}}
+if FC_SHOW_METHOD:
+    for _t, _cols in FC_OPTIONAL_SRC.items():
+        FC_SRC[_t].update(_cols)
+# Never loaded: in-sample fit (fitted_gmv) and the combined GMV-or-orders flag (is_anomaly / is_any_anomaly).
+FC_NEVER_LOAD = {"fitted_gmv", "is_anomaly", "is_any_anomaly"}
+assert not FC_NEVER_LOAD & {c for cols in FC_SRC.values() for c in cols.values()}, "never-load column mapped"
 FC_MARTS = {"GMV Forecast": "mart_gmv_forecast", "GMV Forecast Backtest": "mart_gmv_forecast_backtest",
             "GMV Anomalies": "mart_gmv_anomalies"}
 _H = {"hidden": True, "summarize": "none"}
@@ -363,6 +372,7 @@ FC_TYPES = {  # model column -> (dataType, opts)
     "Month": ("dateTime", {"summarize": "none", "fmt": "yyyy-mm"}), "gmv_robust_z": ("double", _H),
     "is_gmv_anomaly": ("boolean", _H), "orders_robust_z": ("double", _H), "is_orders_anomaly": ("boolean", _H),
     "z_threshold": ("decimal", _H),
+    "Interval Method": ("string", _V), "Selected Model": ("string", _V),
 }
 
 
@@ -904,13 +914,45 @@ FC_MEASURES = [
      "Supporting measure (formatting): stored z_threshold (3.5) for the threshold line."),
     (FCF, "Orders Robust Z", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", "0.00",
      [f"IF ( {ONE_MONTH}, SUM ( {FCA}[orders_robust_z] ) )"],
-     "Supporting measure (formatting): ORDERS robust z (orders flag), a separate series; not a GMV anomaly."),
+     "Supporting measure (breakdown): ORDERS robust z (orders flag), a separate series; not a GMV anomaly."),
+]
+_BT_TEST = f"REMOVEFILTERS ( {FCB} ), {FCB}[Split] = \"test\""
+FC_MEASURES += [
+    (FCF, "Backtest Test sMAPE (Model)", "KPI_GMV_FORECAST", "PARTIAL", "0.00%",
+     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Is Selected Model] = TRUE () )"],
+     "Supporting measure (breakdown): selected model's test sMAPE (drives the dynamic backtest verdict)."),
+    (FCF, "Backtest Test sMAPE (Baseline)", "KPI_GMV_FORECAST", "PARTIAL", "0.00%",
+     [f"CALCULATE ( [Backtest sMAPE %], {_BT_TEST}, {FCB}[Is Selected Model] = FALSE () )"],
+     "Supporting measure (breakdown): naive baseline's test sMAPE (drives the dynamic backtest verdict)."),
+    (FCF, "Backtest Test Verdict", "KPI_GMV_FORECAST", "PARTIAL", None,
+     ["VAR _m = [Backtest Test sMAPE (Model)]", "VAR _b = [Backtest Test sMAPE (Baseline)]", "RETURN",
+      "    IF (", "        ISBLANK ( _m ) || ISBLANK ( _b ), BLANK (),",
+      "        \"Model \" & IF ( _m < _b, \"beats\", \"does not beat\" ) & \" the naive baseline on the test period (test sMAPE \"",
+      "            & FORMAT ( _m, \"0.00%\" ) & \" vs \" & FORMAT ( _b, \"0.00%\" ) & \")\"", "    )"],
+     "Supporting measure (formatting): dynamic text comparing model vs baseline test sMAPE from mart_gmv_forecast_backtest."),
+    (FCF, "Test Months Outside Interval", "KPI_GMV_FORECAST", "PARTIAL", INT,
+     ["COUNTROWS (", "    FILTER (",
+      f"        CALCULATETABLE ( {FCT}, REMOVEFILTERS ( {FCT} ), {FCT}[Split] = \"test\" ),",
+      f"        {FCT}[actual_gmv] < {FCT}[lower_gmv] || {FCT}[actual_gmv] > {FCT}[upper_gmv]", "    )", ") + 0"],
+     "Supporting measure (breakdown): test months whose actual GMV is below lower_gmv or above upper_gmv."),
+    (FCF, "Test Interval Note", "KPI_GMV_FORECAST", "PARTIAL", None,
+     ["VAR _n = [Test Months Outside Interval]",
+      f"VAR _t = CALCULATE ( COUNTROWS ( {FCT} ), REMOVEFILTERS ( {FCT} ), {FCT}[Split] = \"test\" )",
+      f"VAR _below = COUNTROWS ( FILTER ( CALCULATETABLE ( {FCT}, REMOVEFILTERS ( {FCT} ), {FCT}[Split] = \"test\" ), {FCT}[actual_gmv] < {FCT}[lower_gmv] ) ) + 0",
+      "RETURN",
+      "    IF ( _n > 0,",
+      "        FORMAT ( _n, \"0\" ) & \" of \" & FORMAT ( _t, \"0\" ) & \" test actuals fell outside the 95% interval (\" & FORMAT ( _below, \"0\" ) & \" below lower, \" & FORMAT ( _n - _below, \"0\" ) & \" above upper): intervals are not calibrated\"",
+      "    )"],
+     "Supporting measure (formatting): dynamic interval-coverage note, BLANK when every test actual is inside the interval."),
 ]
 MEASURES.extend(FC_MEASURES)
 SUPPORT_KIND.update({"GMV Forecast Lower": "formatting", "GMV Forecast Upper": "formatting", "GMV Baseline (Naive)": "breakdown",
                      "GMV Forecast Actual": "breakdown", "GMV Backtest Forecast": "breakdown", "Backtest MAE": "breakdown",
                      "Backtest sMAPE %": "breakdown", "Backtest Months": "breakdown", "GMV Anomaly Months": "breakdown",
-                     "GMV Robust Z": "formatting", "GMV Anomaly Z Threshold": "formatting", "Orders Robust Z": "formatting"})
+                     "GMV Robust Z": "formatting", "GMV Anomaly Z Threshold": "formatting", "Orders Robust Z": "breakdown",
+                     "Backtest Test sMAPE (Model)": "breakdown", "Backtest Test sMAPE (Baseline)": "breakdown",
+                     "Backtest Test Verdict": "formatting", "Test Months Outside Interval": "breakdown",
+                     "Test Interval Note": "formatting"})
 
 CALC_ITEMS = [
     ("Current", ["SELECTEDMEASURE ()"], None),
@@ -1489,6 +1531,9 @@ mf.interactions.append((hid(mf.pid, "slicer-date"), hid(mf.pid, "time-to-close")
 PAGES.append(mf)
 
 # ---- Forecast & Anomalies (exploratory; standalone monthly marts, own month axis)
+FA_ALL_DATES = "All dates: date slicers don't apply (standalone monthly mart). "
+NOTE_CARD_OBJ = {"labels": [{"properties": {"color": color(AMBER), "fontSize": lit(10)}}],
+                 "categoryLabels": [{"properties": {"show": lit(False)}}]}
 fa = Page("forecast-anomalies", "Forecast & Anomalies")
 header(fa, date_slicer=False)
 textbox(fa, "labels", (24, 52, 1232, 48),
@@ -1499,31 +1544,40 @@ fa.add("forecast", "lineChart", (24, 108, 820, 300),
         "Y": [("m", M, "GMV Forecast Actual", "Actual GMV"),
               ("m", M, "GMV Backtest Forecast", "Backtest forecast (validation + test)"),
               ("m", M, "GMV Forecast", "Forward forecast"),
-              ("m", M, "GMV Forecast Lower", "95% model-based interval, not a guarantee (lower)"),
-              ("m", M, "GMV Forecast Upper", "95% model-based interval, not a guarantee (upper)"),
+              ("m", M, "GMV Forecast Lower", "95% interval (lower)"),
+              ("m", M, "GMV Forecast Upper", "95% interval (upper)"),
               ("m", M, "GMV Baseline (Naive)", "Naive baseline (last value)")]},
        "GMV actuals, backtest and forward forecast (BRL, monthly)",
-       subtitle="Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02. Interval = 95% model-based interval, not a guarantee",
+       subtitle=FA_ALL_DATES + "95% interval (lower/upper): model-based, not a guarantee. Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02",
        sort=("c", "GMV Forecast", "Forecast Month", "Ascending"))
 fa.add("backtest", "pivotTable", (856, 108, 400, 196),
        {"Rows": [("c", "GMV Forecast Backtest", "Split")], "Columns": [("c", "GMV Forecast Backtest", "Model")],
         "Values": [("m", M, "Backtest MAE", "MAE (BRL)"), ("m", M, "Backtest sMAPE %", "sMAPE"), ("m", M, "Backtest Months", "n months")]},
-       "Backtest, 3 months per split", subtitle="Model (holt_damped) vs naive baseline (naive_last_value)", objects=NO_TOTALS)
-textbox(fa, "backtest-note", (856, 312, 400, 96),
-        "Model does not beat the naive baseline on the test period (test sMAPE 28.25% vs 13.37%). "
-        "All 3 test actuals (Jun-Aug 2018) fell below the 95% interval lower bound: intervals are not calibrated.", AMBER)
+       "Backtest, 3 months per split", subtitle=FA_ALL_DATES + "Model (holt_damped) vs naive baseline (naive_last_value)", objects=NO_TOTALS)
+fa.add("backtest-verdict", "card", (856, 312, 400, 46), {"Values": [("m", M, "Backtest Test Verdict")]}, None,
+       objects=NOTE_CARD_OBJ)
+fa.add("interval-note", "card", (856, 362, 400, 46), {"Values": [("m", M, "Test Interval Note")]}, None,
+       objects=NOTE_CARD_OBJ)
 fa.add("anomaly-z", "lineChart", (24, 420, 820, 288),
        {"Category": [("c", "GMV Anomalies", "Month")],
         "Y": [("m", M, "GMV Robust Z", "GMV robust z"), ("m", M, "GMV Anomaly Z Threshold", "Threshold (z = 3.5)"),
               ("m", M, "Orders Robust Z", "Orders robust z (orders flag, not GMV)")]},
        "GMV robust z vs 3.5 threshold (20 complete reporting months)",
-       subtitle="Statistical flags, not confirmed incidents. Nov 2017 GMV z = 2.84 (not flagged; Black Friday not detectable at monthly grain); orders z 5.60 is the orders flag only",
+       subtitle=FA_ALL_DATES + "Statistical flags, not confirmed incidents. Nov 2017 GMV z = 2.84 (not flagged; Black Friday not detectable at monthly grain); orders z 5.60 is the orders flag only",
        sort=("c", "GMV Anomalies", "Month", "Ascending"))
 fa.add("card-anomaly-months", "card", (856, 420, 400, 120), {"Values": [("m", M, "GMV Anomaly Months")]},
-       "GMV anomaly months (is_gmv_anomaly)", subtitle="Statistical flags, not confirmed incidents", objects=CARD_OBJ)
-textbox(fa, "anomaly-note", (856, 548, 400, 160),
+       "GMV anomaly months (is_gmv_anomaly)", subtitle=FA_ALL_DATES + "Statistical flags, not confirmed incidents", objects=CARD_OBJ)
+textbox(fa, "anomaly-note", (856, 548, 400, 108),
         "Flag = is_gmv_anomaly only (robust z > 3.5 on residuals of the selected model). "
         "The combined is_anomaly field (GMV OR orders) is not used. Monthly grain; day-level events like Black Friday are not detectable.")
+if FC_SHOW_METHOD:  # caption with DE's interval_method / selected_model (switch: FC_SHOW_METHOD)
+    fa.add("method", "multiRowCard", (856, 660, 400, 48),
+           {"Values": [("c", "GMV Forecast", "Interval Method"), ("c", "GMV Forecast", "Selected Model")]},
+           "Interval method / selected model", subtitle=FA_ALL_DATES, objects=SMALL_CARD_OBJ)
+# No date or reporting-month slicer may filter the standalone forecast/anomaly visuals.
+for _sl in [v["name"] for v in fa.visuals if v["visual"]["visualType"] == "slicer"]:
+    for _tg in [v["name"] for v in fa.visuals if v["visual"]["visualType"] != "slicer"]:
+        fa.interactions.append((_sl, _tg, "NoFilter"))
 PAGES.append(fa)
 # Adding a page: build a Page, call header()/cards(), PAGES.append(it).
 # The pageNavigator on every page lists all non-hidden pages in PAGES order automatically.

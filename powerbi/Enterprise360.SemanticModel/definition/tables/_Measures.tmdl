@@ -1036,7 +1036,7 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
 
-	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (formatting): ORDERS robust z (orders flag), a separate series; not a GMV anomaly.
+	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (breakdown): ORDERS robust z (orders flag), a separate series; not a GMV anomaly.
 	measure 'Orders Robust Z' = IF ( HASONEVALUE ( 'GMV Anomalies'[Month] ), SUM ( 'GMV Anomalies'[orders_robust_z] ) )
 		formatString: 0.00
 		displayFolder: Forecast & Anomalies
@@ -1046,9 +1046,98 @@ table _Measures
 
 		annotation KPI_Status = PARTIAL
 
-		annotation KPI_SupportingKind = formatting
+		annotation KPI_SupportingKind = breakdown
 
 		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): selected model's test sMAPE (drives the dynamic backtest verdict).
+	measure 'Backtest Test sMAPE (Model)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Is Selected Model] = TRUE () )
+		formatString: 0.00%
+		displayFolder: Forecast & Anomalies
+		lineageTag: f0626175-7cd2-50f1-a374-72bb0dfa37fc
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): naive baseline's test sMAPE (drives the dynamic backtest verdict).
+	measure 'Backtest Test sMAPE (Baseline)' = CALCULATE ( [Backtest sMAPE %], REMOVEFILTERS ( 'GMV Forecast Backtest' ), 'GMV Forecast Backtest'[Split] = "test", 'GMV Forecast Backtest'[Is Selected Model] = FALSE () )
+		formatString: 0.00%
+		displayFolder: Forecast & Anomalies
+		lineageTag: 0415bcf4-7c02-5fc4-9256-eb7b6011ae67
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): dynamic text comparing model vs baseline test sMAPE from mart_gmv_forecast_backtest.
+	measure 'Backtest Test Verdict' =
+			VAR _m = [Backtest Test sMAPE (Model)]
+			VAR _b = [Backtest Test sMAPE (Baseline)]
+			RETURN
+				IF (
+					ISBLANK ( _m ) || ISBLANK ( _b ), BLANK (),
+					"Model " & IF ( _m < _b, "beats", "does not beat" ) & " the naive baseline on the test period (test sMAPE "
+						& FORMAT ( _m, "0.00%" ) & " vs " & FORMAT ( _b, "0.00%" ) & ")"
+				)
+		displayFolder: Forecast & Anomalies
+		lineageTag: 529a7125-f70b-53ec-bf4f-8c1fb1645b49
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): test months whose actual GMV is below lower_gmv or above upper_gmv.
+	measure 'Test Months Outside Interval' =
+			COUNTROWS (
+				FILTER (
+					CALCULATETABLE ( 'GMV Forecast', REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[Split] = "test" ),
+					'GMV Forecast'[actual_gmv] < 'GMV Forecast'[lower_gmv] || 'GMV Forecast'[actual_gmv] > 'GMV Forecast'[upper_gmv]
+				)
+			) + 0
+		formatString: #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 876c6866-784d-50a2-b31e-c5d9ebaf4a13
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): dynamic interval-coverage note, BLANK when every test actual is inside the interval.
+	measure 'Test Interval Note' =
+			VAR _n = [Test Months Outside Interval]
+			VAR _t = CALCULATE ( COUNTROWS ( 'GMV Forecast' ), REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[Split] = "test" )
+			VAR _below = COUNTROWS ( FILTER ( CALCULATETABLE ( 'GMV Forecast', REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[Split] = "test" ), 'GMV Forecast'[actual_gmv] < 'GMV Forecast'[lower_gmv] ) ) + 0
+			RETURN
+				IF ( _n > 0,
+					FORMAT ( _n, "0" ) & " of " & FORMAT ( _t, "0" ) & " test actuals fell outside the 95% interval (" & FORMAT ( _below, "0" ) & " below lower, " & FORMAT ( _n - _below, "0" ) & " above upper): intervals are not calibrated"
+				)
+		displayFolder: Forecast & Anomalies
+		lineageTag: eed537bb-82ef-58e2-91cd-57e04d036b19
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
 	column Value
 		dataType: string

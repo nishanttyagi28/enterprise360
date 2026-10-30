@@ -1,33 +1,73 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json",
-  "name": "a7dbb6825c6e5f7fbb28",
+  "name": "1b0ce70b6c0956f3bb9f",
   "position": {
     "x": 856,
-    "y": 312,
-    "z": 500,
-    "height": 96,
+    "y": 362,
+    "z": 600,
+    "height": 46,
     "width": 400,
-    "tabOrder": 500
+    "tabOrder": 600
   },
   "visual": {
-    "visualType": "textbox",
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Test Interval Note"
+                }
+              },
+              "queryRef": "_Measures.Test Interval Note",
+              "nativeQueryRef": "Test Interval Note"
+            }
+          ]
+        }
+      }
+    },
     "objects": {
-      "general": [
+      "labels": [
         {
           "properties": {
-            "paragraphs": [
-              {
-                "textRuns": [
-                  {
-                    "value": "Model does not beat the naive baseline on the test period (test sMAPE 28.25% vs 13.37%). All 3 test actuals (Jun-Aug 2018) fell below the 95% interval lower bound: intervals are not calibrated.",
-                    "textStyle": {
-                      "fontSize": "10pt",
-                      "color": "#B45309"
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#B45309'"
                     }
                   }
-                ]
+                }
               }
-            ]
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "categoryLabels": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
           }
         }
       ]

@@ -242,7 +242,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Model (holt_damped) vs naive baseline (naive_last_value)'"
+                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). Model (holt_damped) vs naive baseline (naive_last_value)'"
                 }
               }
             },

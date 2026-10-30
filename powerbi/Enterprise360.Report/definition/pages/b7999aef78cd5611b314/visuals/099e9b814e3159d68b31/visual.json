@@ -91,7 +91,7 @@
               },
               "queryRef": "_Measures.GMV Forecast Lower",
               "nativeQueryRef": "GMV Forecast Lower",
-              "displayName": "95% model-based interval, not a guarantee (lower)"
+              "displayName": "95% interval (lower)"
             },
             {
               "field": {
@@ -106,7 +106,7 @@
               },
               "queryRef": "_Measures.GMV Forecast Upper",
               "nativeQueryRef": "GMV Forecast Upper",
-              "displayName": "95% model-based interval, not a guarantee (upper)"
+              "displayName": "95% interval (upper)"
             },
             {
               "field": {
@@ -272,7 +272,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02. Interval = 95% model-based interval, not a guarantee'"
+                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). 95% interval (lower/upper): model-based, not a guarantee. Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02'"
                 }
               }
             },

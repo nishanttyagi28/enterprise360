@@ -4,10 +4,10 @@
   "position": {
     "x": 24,
     "y": 420,
-    "z": 600,
+    "z": 700,
     "height": 288,
     "width": 820,
-    "tabOrder": 600
+    "tabOrder": 700
   },
   "visual": {
     "visualType": "lineChart",
@@ -227,7 +227,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Statistical flags, not confirmed incidents. Nov 2017 GMV z = 2.84 (not flagged; Black Friday not detectable at monthly grain); orders z 5.60 is the orders flag only'"
+                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). Statistical flags, not confirmed incidents. Nov 2017 GMV z = 2.84 (not flagged; Black Friday not detectable at monthly grain); orders z 5.60 is the orders flag only'"
                 }
               }
             },

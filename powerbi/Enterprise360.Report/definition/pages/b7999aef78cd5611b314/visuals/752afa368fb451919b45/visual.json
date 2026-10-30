@@ -4,10 +4,10 @@
   "position": {
     "x": 856,
     "y": 420,
-    "z": 700,
+    "z": 800,
     "height": 120,
     "width": 400,
-    "tabOrder": 700
+    "tabOrder": 800
   },
   "visual": {
     "visualType": "card",
@@ -199,7 +199,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Statistical flags, not confirmed incidents'"
+                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). Statistical flags, not confirmed incidents'"
                 }
               }
             },

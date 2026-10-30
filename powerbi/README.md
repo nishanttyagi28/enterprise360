@@ -231,6 +231,24 @@ Only `[GMV Forecast]`, `[GMV Forecast Lower/Upper]`, `[GMV Baseline (Naive)]`, `
 - Robust-z chart against the 3.5 threshold, with the orders series labelled separately.
 - `[GMV Anomaly Months]` card. There is no accuracy headline card and no targets.
 
+**Rulings applied (KPI & Quality on f8d4f4c):**
+- **Approved:** the split `[GMV Forecast Lower]` / `[GMV Forecast Upper]` drawn as separate lines; the marts staying unlinked from Date; the three column differences; and the seven extra measures.
+- **Supporting kinds:**
+  - **formatting:** Lower/Upper, Z Threshold, Robust Z, plus the dynamic texts
+  - **breakdown:** Baseline, Forecast Actual, Backtest Forecast, Backtest MAE/sMAPE/Months, Anomaly Months, and `[Orders Robust Z]` (labelled "orders flag, not GMV")
+- **Parent annotation:** every forecast measure is annotated `KPI_ParentKpi = KPI_GMV_FORECAST`, and every anomaly measure `KPI_GMV_ANOMALY_FLAG`.
+
+**Page behaviour:**
+- **Legend:** "95% interval (lower)" / "95% interval (upper)", and the subtitle says "95% interval (lower/upper): model-based, not a guarantee".
+- **Slicers:** every forecast, backtest and anomaly visual says "All dates: date slicers don't apply (standalone monthly mart)". The page has no date slicer today. Any slicer added later is set to NoFilter on every visual on the page by the generator.
+- **Dynamic notes:** `[Backtest Test Verdict]` compares the selected model's test sMAPE with the baseline's. `[Test Interval Note]` counts the test months outside lower_gmv/upper_gmv and is BLANK when that count is 0. Both are shown as cards. Current text:
+  - "Model does not beat the naive baseline on the test period (test sMAPE 28.25% vs 13.37%)"
+  - "3 of 3 test actuals fell outside the 95% interval (3 below lower, 0 above upper): intervals are not calibrated"
+
+**Coming DE changes:**
+- **New columns:** `interval_method` and `selected_model` do **not** exist yet (checked 2026-10-31). They are mapped in `FC_OPTIONAL_SRC`. Set `FC_SHOW_METHOD = True` in `tools/build_pbip.py` to load them and show the "Interval method / selected model" caption. Both modes were generated and validated.
+- **Never loaded:** `fitted_gmv` and the combined flag under either name, `is_anomaly` or `is_any_anomaly`. The generator asserts this, and the validator `forecast-rules` check fails on either flag name or on `fitted_gmv`.
+
 **Column notes vs the spec:**
 - `mart_gmv_forecast_backtest` has an extra `series` column (gmv/orders); it is filtered to gmv in M.
 - `smape_pct` is stored in percent units (28.2545), so it is divided by 100.
