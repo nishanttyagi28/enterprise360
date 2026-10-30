@@ -85,5 +85,5 @@ def test_funnel_and_forecast_kpis(gov):
     assert "cohort" in ks["KPI_FUNNEL_CONVERSION_RATE"]["definition"].lower()
     for i in ("KPI_GMV_FORECAST", "KPI_GMV_ANOMALY_FLAG"):
         assert ks[i]["status"] == "PARTIAL" and "exploratory" in ks[i]["name"].lower()
-    assert "not yet measured" in ks["KPI_GMV_FORECAST"]["definition"]
+    assert "Backtest" in ks["KPI_GMV_FORECAST"]["definition"]  # only stored backtest values cited
     assert gov["kpis"]["dictionary_version"] == "2.1.0"

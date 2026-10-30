@@ -1944,7 +1944,7 @@ kpis:
     purpose: 'numerator: MQLs in the first-contact cohort with a closed deal at any later date (Lead[is_closed]); attributed to first-contact month, not won month'
   - measure: '[Cohort Is Mature]'
     kind: formatting
-    purpose: '1/0 flag: 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0); over a multi-month selection reflects the latest cohort'
+    purpose: '1/0 per cohort month only; BLANK when more than one cohort month is in context (Power BI 727558e). 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0)'
   - measure: '[Cohort Maturity Colour]'
     kind: formatting
     purpose: 'hidden helper colouring immature cohorts (from [Cohort Is Mature]); not displayed as a value'
@@ -1954,7 +1954,7 @@ kpis:
   - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 210 days (observed p95 of first_contact->won days; p75 55, p90 162, max 427), locked by owner. With max won_date 2018-11-14, Apr and May 2018 cohorts are immature — report mature cohorts only or show the flag.'
   - 'Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.'
   - 'Ratio of sums per cohort; never average monthly rates across cohorts or origins.'
-  version: 1.0.2
+  version: 1.0.3
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
@@ -1970,6 +1970,11 @@ kpis:
     date: '2026-10-31'
     author: KPI & Quality
     change: sources CONFIRMED against DE models (bb277c9); supporting measures aligned to Power BI (dabfa3f, KPI_ParentKpi); PBI measure name [Lead-to-Deal Conversion %]
+    pr: TBD
+  - version: 1.0.3
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: '[Cohort Is Mature] is 1/0 per cohort month only; BLANK when more than one cohort month is in context (aligned to Power BI 727558e)'
     pr: TBD
   implementations:
     dbt: 'marts.mart_funnel_monthly (mqls, converted_leads_in_cohort, conversion_rate, is_cohort_mature); PBI computes from core.fct_leads rows'
@@ -2038,99 +2043,124 @@ kpis:
   name: GMV Forecast (exploratory)
   status: PARTIAL
   area: forecasting
-  definition: "Model-based forecast of KPI_GMV (SUM item_price, freight excluded) at monthly or daily grain per DE's implementation, trained only on complete reporting months. Accuracy: not yet measured (no backtest values stored in any mart)."
-  formula: 'forecast_gmv_t = model(GMV history up to training cutoff); compare vs seasonal-naive / naive-last-value baseline'
-  numerator: '—'
-  denominator: '—'
+  definition: 'Exploratory model-based MONTHLY forecast of KPI_GMV (SUM item_price, freight excluded; NOT revenue), horizon 6 months (2018-09..2019-02). Trained only on months with is_complete_month AND is_reporting_month (2017-01..2018-08, 20 months; source marts.mart_business_overview_monthly, actuals reconcile to fct_order_items with 0.00 difference). Method: ETS candidates Holt damped additive trend vs SES, selected on validation sMAPE (holt_damped selected); baseline naive_last_value (seasonal naive infeasible, < 2 years). Backtest (run 7476f047, 3 points per split, monthly): VALIDATION model holt_damped MAE 60,295 BRL / sMAPE 5.80% vs naive_last_value MAE 147,948 / sMAPE 16.11%; TEST model MAE 287,398 / sMAPE 28.25% vs baseline MAE 124,745 / sMAPE 13.37%. The selected model does NOT beat the naive baseline on the test holdout.'
+  formula: forecast_gmv = ETS(A,Ad,N) refit on all 20 usable months; compare to baseline_gmv (last value); sMAPE = mean(2|a-f|/(|a|+|f|))
+  numerator: —
+  denominator: —
   unit: BRL
   source:
   - olist_order_items.price
   - olist_orders.order_purchase_timestamp
-  source_tag: 'PROPOSED — pending DE (GMV forecast/anomaly mart name TBD by DE; no model in repo on 2026-10-31; proposed names mart_gmv_forecast / mart_gmv_anomalies)'
+  source_tag: PROPOSED — pending DE commit (marts.mart_gmv_forecast, marts.mart_gmv_anomalies, marts.mart_gmv_forecast_backtest built from analytics.forecast_* run 7476f047 on 2026-10-30 20:31 UTC; SQL/Python uncommitted on 2026-10-31)
   fact_dependencies:
   - fct_order_items
-  - mart_gmv_forecast (PROPOSED, name TBD by DE)
+  - marts.mart_business_overview_monthly
+  - marts.mart_gmv_forecast
+  - marts.mart_gmv_forecast_backtest
   dimension_dependencies:
   - dim_date
-  grain: 'forecast date x horizon (monthly or daily per DE)'
+  grain: month (forecast_month), latest successful run only
   refresh: daily batch after ingestion + dbt build (static historical dataset)
   owner: Head of Sales
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - 'training window only where is_complete_month AND is_reporting_month'
-  - 'time-based train/validation/test split; no test date inside training window (leakage)'
-  - 'forecast dates contiguous with no gaps per horizon'
-  - "metrics MAE and MAPE/sMAPE reported against baseline; cite only values stored by DE backtest, else 'not yet measured'"
-  - 'prediction intervals labelled model-based, not guarantees'
+  - 'split: train 2017-01..2018-02 (14) | validation 2018-03..2018-05 (3, fit on train) | test 2018-06..2018-08 (3, fit on train+validation) | forecast 2018-09..2019-02 (6, refit on all)'
+  - no validation/test/forecast row at or before its training_cutoff (assert_forecast_no_train_test_overlap)
+  - forecast_month unique and contiguous
+  - backtest has selected model and naive baseline per series x split
+  - WARN if selected model sMAPE >= baseline on test (assert_forecast_model_beats_baseline; currently WARN)
+  - actual_gmv == mart_business_overview_monthly.gmv == SUM(fct_order_items.item_price) by month (0.00)
+  - cite accuracy only from mart_gmv_forecast_backtest; label 'backtest, 3 months'
   supporting_measures:
   - measure: '[GMV Forecast Lower/Upper]'
     kind: formatting
-    purpose: 'model-based prediction interval band'
+    purpose: 95% model-based prediction interval (ETS analytic; lower clipped at 0) from lower_gmv/upper_gmv; label as model-based, not a guarantee
+  - measure: '[GMV Baseline (Naive)]'
+    kind: breakdown
+    purpose: baseline_gmv, last observed value; shown alongside the forecast
   caveats:
-  - "Exploratory, not a KPI of record; labelled 'exploratory' in every report. Forecasts GMV (item price only), NOT revenue."
-  - 'Only ~20 usable complete reporting months (dim_date.is_complete_month AND is_reporting_month); excludes sparse 2016 months and the truncated Sep–Oct 2018 tail.'
-  - "Black Friday 2017-11-24 spike and May 2018 truckers' strike distort fits and will flag."
-  - 'Method, horizon and baseline: to be confirmed from DE implementation (not in repo 2026-10-31).'
-  version: 1.0.0
+  - Exploratory; not a KPI of record; GMV not revenue.
+  - 'Backtest (run 7476f047, 3 points per split, monthly): VALIDATION model holt_damped MAE 60,295 BRL / sMAPE 5.80% vs naive_last_value MAE 147,948 / sMAPE 16.11%; TEST model MAE 287,398 / sMAPE 28.25% vs baseline MAE 124,745 / sMAPE 13.37%. The selected model does NOT beat the naive baseline on the test holdout.'
+  - Metrics are on 3 points per split; not statistically meaningful. Model selection was done on 3 validation months.
+  - 'All 3 test actuals (Jun–Aug 2018: 865,124 / 895,507 / 854,686) fall BELOW the 95% interval lower bounds (932,111 / 977,905 / 1,021,685): intervals are under-dispersed / not calibrated.'
+  - Damped trend extrapolates growth (forecast 939k rising to 1.03M) while Jun–Aug 2018 actuals declined; forecast months 2018-09..2019-02 have no actuals (dataset ends) and cannot be verified.
+  - Train rows carry in-sample fitted values in forecast_gmv; never plot them as a forecast.
+  - Only 20 usable months; Black Friday Nov 2017 (1.01M) dominates; no yearly seasonality modelled.
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
     pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: aligned to DE marts as built (method, splits, backtest values, anomaly method); sources still PROPOSED pending DE commit
+    pr: TBD
   implementations:
-    dbt: 'mart_gmv_forecast (PROPOSED)'
-    sql: (none; dbt authoritative once built)
-    power_bi_dax: '[GMV Forecast] (proposed; exploratory)'
+    dbt: marts.mart_gmv_forecast (forecast_gmv, lower_gmv, upper_gmv, baseline_gmv, split, is_forecast); marts.mart_gmv_forecast_backtest (mae, smape_pct, n_months); produced by python -m analytics.forecast
+    sql: (none; dbt authoritative)
+    power_bi_dax: '[GMV Forecast] (exploratory)'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist
 - id: KPI_GMV_ANOMALY_FLAG
   name: GMV Anomaly Flag (exploratory)
   status: PARTIAL
   area: forecasting
-  definition: 'Day flagged when daily GMV residual vs expected (rolling/forecast expectation) exceeds k robust z-score (MAD-based); default proposal k=3.5 pending DE implementation.'
-  formula: 'flag = |GMV_d − expected_d| / (1.4826 × MAD(residuals)) > k'
-  numerator: '—'
-  denominator: '—'
+  definition: 'Exploratory MONTHLY flag (not daily): month flagged when robust_z = |r - median(r)| / (1.4826 × MAD(r)) > 3.5, where r = actual GMV − expected and expected = one-step-ahead in-sample fit of the selected ETS model (holt_damped) fitted on all 20 complete reporting months. Use mart_gmv_anomalies.is_gmv_anomaly (NOT is_anomaly, which ORs in the orders anomaly). Current run: 0 GMV anomaly months; Nov 2017 robust_z 2.84 (not flagged); May 2018 0.19 (not flagged).'
+  formula: is_gmv_anomaly = |r - median(r)| / (1.4826 * MAD(r)) > 3.5, r = gmv - expected_gmv
+  numerator: —
+  denominator: —
   unit: flag (boolean)
   source:
   - olist_order_items.price
   - olist_orders.order_purchase_timestamp
-  source_tag: 'PROPOSED — pending DE (GMV forecast/anomaly mart name TBD by DE; no model in repo on 2026-10-31; proposed names mart_gmv_forecast / mart_gmv_anomalies)'
+  source_tag: PROPOSED — pending DE commit (marts.mart_gmv_forecast, marts.mart_gmv_anomalies, marts.mart_gmv_forecast_backtest built from analytics.forecast_* run 7476f047 on 2026-10-30 20:31 UTC; SQL/Python uncommitted on 2026-10-31)
   fact_dependencies:
   - fct_order_items
-  - mart_gmv_anomalies (PROPOSED, name TBD by DE)
+  - marts.mart_business_overview_monthly
+  - marts.mart_gmv_anomalies
   dimension_dependencies:
   - dim_date
-  grain: 'day'
+  grain: month (anomaly_date = month start), latest run only
   refresh: daily batch after ingestion + dbt build (static historical dataset)
   owner: Head of Sales
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - 'one row per date (grain unique)'
-  - 'partial days and truncated tail (outside is_reporting_month) excluded'
-  - 'threshold k stored with each row'
+  - anomaly_date unique (assert_forecast_grain_anomalies)
+  - z_threshold = 3.5 stored per row
+  - 'only complete reporting months evaluated (20 rows: 2017-01..2018-08); partial 2016 months and the 2018-09/10 tail excluded'
+  - GMV KPI uses is_gmv_anomaly; is_anomaly is GMV OR orders and must not be labelled a GMV anomaly
   supporting_measures:
-  - measure: '[GMV Anomaly Days]'
+  - measure: '[GMV Anomaly Months]'
     kind: breakdown
-    purpose: 'count of flagged days in context'
+    purpose: count of months with is_gmv_anomaly = true (0 in run 7476f047)
+  - measure: '[GMV Robust Z]'
+    kind: formatting
+    purpose: gmv_robust_z shown with the 3.5 threshold line
   caveats:
-  - "Exploratory, not a KPI of record; labelled 'exploratory' in every report. Forecasts GMV (item price only), NOT revenue."
-  - 'Only ~20 usable complete reporting months (dim_date.is_complete_month AND is_reporting_month); excludes sparse 2016 months and the truncated Sep–Oct 2018 tail.'
-  - "Black Friday 2017-11-24 spike and May 2018 truckers' strike distort fits and will flag."
-  - "Flags are statistical, not confirmed incidents; known events (Black Friday 2017-11-24, truckers' strike May 2018) are expected flags."
-  version: 1.0.0
+  - Flags are statistical, not confirmed incidents.
+  - 'Monthly grain cannot isolate day events: Black Friday 2017-11-24 shows only as Nov 2017 (GMV robust_z 2.84, not flagged; orders z 5.60 flagged); truckers'' strike May 2018 not flagged (0.19).'
+  - Expected comes from a model whose parameters were estimated on all months including the evaluated month (in-sample, not a centered window but not strictly out-of-sample); residual MAD is over the same 20 points.
+  - With 20 points the threshold has low power; 0 flags is not evidence of no incidents.
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
     pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: aligned to DE marts as built (method, splits, backtest values, anomaly method); sources still PROPOSED pending DE commit
+    pr: TBD
   implementations:
-    dbt: 'mart_gmv_anomalies (PROPOSED)'
-    sql: (none; dbt authoritative once built)
-    power_bi_dax: '[GMV Anomaly Days] (proposed; exploratory)'
+    dbt: marts.mart_gmv_anomalies (gmv, expected_gmv, gmv_residual, gmv_robust_z, is_gmv_anomaly, z_threshold)
+    sql: (none; dbt authoritative)
+    power_bi_dax: '[GMV Anomaly Months] (exploratory)'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
   domain: olist

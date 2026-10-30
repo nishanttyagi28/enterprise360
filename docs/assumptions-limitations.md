@@ -36,4 +36,5 @@ Dataset in scope: **Olist Brazilian E-Commerce Public Dataset** (Kaggle `olistbr
 ## GMV forecast / anomaly (exploratory)
 - L-G1 Forecasts and anomaly flags are exploratory and model-based; GMV only (item price), never revenue. Intervals are not guarantees.
 - L-G2 ~20 usable complete reporting months (is_complete_month AND is_reporting_month); 2016 and Sep–Oct 2018 excluded. Black Friday 2017-11-24 and the May 2018 truckers' strike distort fits and will flag.
-- L-G3 Accuracy not yet measured — no DE backtest stored. Mart names (proposed mart_gmv_forecast / mart_gmv_anomalies) TBD by DE; tests gated by var forecast_models_built (default false).
+- L-G3 DE marts (uncommitted): marts.mart_gmv_forecast, mart_gmv_anomalies, mart_gmv_forecast_backtest (run 7476f047). Monthly grain, horizon 6, trained on 20 complete reporting months (2017-01..2018-08); holt_damped vs naive_last_value. Backtest on 3 points per split: validation sMAPE 5.80% vs 16.11% baseline, TEST sMAPE 28.25% vs 13.37% baseline — the model does NOT beat the baseline on test, and all 3 test actuals fall below the 95% interval.
+- L-G4 Anomalies are monthly (robust z > 3.5, 1.4826*MAD, expected = in-sample ETS fit): 0 GMV anomaly months; Nov 2017 z 2.84, May 2018 z 0.19 not flagged. mart_gmv_anomalies.is_anomaly also ORs the orders flag — use is_gmv_anomaly for GMV.
