@@ -901,7 +901,7 @@ FC_MEASURES = [
     (FCF, "Backtest MAE", "KPI_GMV_FORECAST", "PARTIAL", BRL, [f"SUM ( {FCB}[mae] )"],
      "Supporting measure (breakdown): backtest MAE (BRL) per model x split, 3 months per split. Read per cell; not additive."),
     (FCF, "Backtest sMAPE %", "KPI_GMV_FORECAST", "PARTIAL", "0.00%", [f"DIVIDE ( SUM ( {FCB}[smape_pct] ), 100 )"],
-     "Supporting measure (breakdown): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive."),
+     "Supporting measure (formatting): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive."),
     (FCF, "Backtest Months", "KPI_GMV_FORECAST", "PARTIAL", INT, [f"SUM ( {FCB}[n_months] )"],
      "Supporting measure (breakdown): n_months in the backtest split (3)."),
     (FCF, "GMV Anomaly Months", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", INT,
@@ -948,7 +948,7 @@ FC_MEASURES += [
 MEASURES.extend(FC_MEASURES)
 SUPPORT_KIND.update({"GMV Forecast Lower": "formatting", "GMV Forecast Upper": "formatting", "GMV Baseline (Naive)": "breakdown",
                      "GMV Forecast Actual": "breakdown", "GMV Backtest Forecast": "breakdown", "Backtest MAE": "breakdown",
-                     "Backtest sMAPE %": "breakdown", "Backtest Months": "breakdown", "GMV Anomaly Months": "breakdown",
+                     "Backtest sMAPE %": "formatting", "Backtest Months": "breakdown", "GMV Anomaly Months": "breakdown",
                      "GMV Robust Z": "formatting", "GMV Anomaly Z Threshold": "formatting", "Orders Robust Z": "breakdown",
                      "Backtest Test sMAPE (Model)": "breakdown", "Backtest Test sMAPE (Baseline)": "breakdown",
                      "Backtest Test Verdict": "formatting", "Test Months Outside Interval": "breakdown",

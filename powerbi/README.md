@@ -234,8 +234,8 @@ Only `[GMV Forecast]`, `[GMV Forecast Lower/Upper]`, `[GMV Baseline (Naive)]`, `
 **Rulings applied (KPI & Quality on f8d4f4c):**
 - **Approved:** the split `[GMV Forecast Lower]` / `[GMV Forecast Upper]` drawn as separate lines; the marts staying unlinked from Date; the three column differences; and the seven extra measures.
 - **Supporting kinds:**
-  - **formatting:** Lower/Upper, Z Threshold, Robust Z, plus the dynamic texts
-  - **breakdown:** Baseline, Forecast Actual, Backtest Forecast, Backtest MAE/sMAPE/Months, Anomaly Months, and `[Orders Robust Z]` (labelled "orders flag, not GMV")
+  - **formatting:** Lower/Upper, Backtest sMAPE %, Z Threshold, Robust Z, plus the dynamic texts
+  - **breakdown:** Baseline, Forecast Actual, Backtest Forecast, Backtest MAE, Backtest Months, Anomaly Months, and `[Orders Robust Z]` (labelled "orders flag, not GMV")
 - **Parent annotation:** every forecast measure is annotated `KPI_ParentKpi = KPI_GMV_FORECAST`, and every anomaly measure `KPI_GMV_ANOMALY_FLAG`.
 
 **Page behaviour:**

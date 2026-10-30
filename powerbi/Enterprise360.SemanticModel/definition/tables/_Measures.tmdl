@@ -966,7 +966,7 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
-	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive.
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive.
 	measure 'Backtest sMAPE %' = DIVIDE ( SUM ( 'GMV Forecast Backtest'[smape_pct] ), 100 )
 		formatString: 0.00%
 		displayFolder: Forecast & Anomalies
@@ -976,7 +976,7 @@ table _Measures
 
 		annotation KPI_Status = PARTIAL
 
-		annotation KPI_SupportingKind = breakdown
+		annotation KPI_SupportingKind = formatting
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
