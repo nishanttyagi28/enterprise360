@@ -178,5 +178,62 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "496828e8659f5a8abcc2",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Date"
+              }
+            },
+            "Property": "is_reporting_month"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f",
+              "Entity": "Date",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f"
+                          }
+                        },
+                        "Property": "is_reporting_month"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

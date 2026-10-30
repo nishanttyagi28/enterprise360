@@ -170,6 +170,34 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - **Seller handover (KPI_SELLER_HANDOVER_OTD, PARTIAL).** `[Seller Handover On-Time %]` = items handed to the carrier (`fct_deliveries.delivered_carrier_at`) at or before the item's `shipping_limit_at` / items with both timestamps. It is a **full timestamp** comparison, now computed in dbt as `core.fct_order_items.is_handover_on_time`. The model loads that source column, and the earlier calculated column was dropped. `shipping_limit_at` is **Olist's seller shipping deadline, not a contractual SLA**. Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time. This caveat appears on every visual that shows the measure: the Operations & Delivery card and the seller-state chart. `[Handover Missing Timestamp]` (DQ exclusion count) is shown on the Data Quality page. Target and benchmark: to be set by owner.
 - dbt surrogate keys are md5 text; `date_key` is an integer yyyymmdd.
 
+## Olist reporting-month rule (trend visuals)
+
+`core.dim_date.is_reporting_month` (DE's flag) is loaded as the hidden column `Date[is_reporting_month]`, alongside `is_complete_month`.
+
+**Reporting months are 2017-01 to 2018-08.** Two kinds of month are excluded:
+- 2016-09 and 2018-10 are incomplete.
+- 2016-10, 2016-11, 2016-12 and 2018-09 are complete but sparse: 2016-11 has 0 orders, 2016-12 has R$11 and 2018-09 has R$145.
+
+**Visuals with the visual-level filter `Date[is_reporting_month] = TRUE`** (8 visuals):
+- Executive Command Center: monthly GMV trend, GMV Growth % (MoM), and the bookmark monthly scorecard.
+- Sales Performance: GMV trend.
+- Customer Intelligence: active vs new customers trend, and the monthly retention table.
+- Operations & Delivery: on-time delivery % by delivery month.
+- Seller Detail: seller GMV trend.
+
+Product Performance has no monthly trend. Cards and totals are not filtered.
+
+**[GMV Growth %]** is BLANK when the prior month's GMV is 0 or blank, or when the current or prior month is not complete or not a reporting month. This is the stricter rule: kpis.yaml KPI_GMV_GROWTH names `is_complete_month`, and says `is_reporting_month` governs the default report range.
+- First values: 2017-01 is BLANK (2016-12 is not a reporting month).
+- 2017-02 is +105.5% (R$120,313 → R$247,303).
+- 2017-03 is +51.4%.
+- 2017-04 is −3.9%.
+
+**Net GMV gap.** [Net GMV] matches kpis.yaml (it excludes canceled and unavailable orders).
+- GMV is R$13,591,643.70 and Net GMV is R$13,494,400.74, so the gap is 0.715% overall (0.681% in reporting months).
+- Monthly, the gap is 0.18–1.95% in reporting months.
+- Because the two lines overlap, the Executive trend shows GMV as the line. [GMV Excluded from Net] (DERIVED, KPI_NET_GMV) is plotted on the secondary axis, and a subtitle states the gap.
+
 ## UCI Online Retail II (GBP) — separate domain
 
 A separate UK online-retail dataset (UCI Online Retail II, 2009-12-01 to 2011-12-09, **GBP**). It is **not comparable with Olist (BRL)** and is never joined to it.

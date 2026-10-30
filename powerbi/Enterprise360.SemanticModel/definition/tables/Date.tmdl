@@ -87,13 +87,22 @@ table Date
 
 		annotation SummarizationSetBy = User
 
+	column is_reporting_month
+		dataType: boolean
+		isHidden
+		lineageTag: d04eb1bc-68b1-5ee6-ba3d-d583493fa627
+		summarizeBy: none
+		sourceColumn: is_reporting_month
+
+		annotation SummarizationSetBy = User
+
 	partition Date = m
 		mode: import
 		source =
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchema, Item = "dim_date"]}[Data],
-					Selected = Table.SelectColumns(Data, {"date_key", "date_day", "year", "quarter", "month", "month_name", "month_start", "year_month", "is_complete_month"}),
+					Selected = Table.SelectColumns(Data, {"date_key", "date_day", "year", "quarter", "month", "month_name", "month_start", "year_month", "is_complete_month", "is_reporting_month"}),
 					Typed = Table.TransformColumnTypes(Selected, {{"date_day", type date}, {"month_start", type date}})
 				in
 					Typed

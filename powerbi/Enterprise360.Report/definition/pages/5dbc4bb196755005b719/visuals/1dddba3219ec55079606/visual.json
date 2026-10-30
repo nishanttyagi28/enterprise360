@@ -46,7 +46,11 @@
               },
               "queryRef": "_Measures.GMV",
               "nativeQueryRef": "GMV"
-            },
+            }
+          ]
+        },
+        "Y2": {
+          "projections": [
             {
               "field": {
                 "Measure": {
@@ -55,11 +59,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "Net GMV"
+                  "Property": "GMV Excluded from Net"
                 }
               },
-              "queryRef": "_Measures.Net GMV",
-              "nativeQueryRef": "Net GMV"
+              "queryRef": "_Measures.GMV Excluded from Net",
+              "nativeQueryRef": "GMV Excluded from Net"
             }
           ]
         }
@@ -172,7 +176,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Monthly GMV vs Net GMV (BRL)'"
+                  "Value": "'Monthly GMV and GMV excluded from Net GMV (BRL)'"
                 }
               }
             },
@@ -189,8 +193,96 @@
             }
           }
         }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Right axis: canceled/unavailable orders (GMV - Net GMV), about 0.7% of GMV overall; reporting months only'"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#F59E0B'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "07c403f5cf8159158a14",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Date"
+              }
+            },
+            "Property": "is_reporting_month"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "f",
+              "Entity": "Date",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "f"
+                          }
+                        },
+                        "Property": "is_reporting_month"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "true"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

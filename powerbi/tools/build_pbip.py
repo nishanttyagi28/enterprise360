@@ -279,6 +279,10 @@ if USE_DQ_RUN_SUMMARY:
 if DATE_COMPLETE_FLAG_COLUMN:
     _date = next(t for t in TABLES if t["name"] == "Date")
     _date["cols"].append((DATE_COMPLETE_FLAG_COLUMN, DATE_COMPLETE_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
+# DE's default-report-range flag (core.dim_date.is_reporting_month): trends + GMV Growth % use it.
+DATE_REPORTING_FLAG_COLUMN = "is_reporting_month"
+next(t for t in TABLES if t["name"] == "Date")["cols"].append(
+    (DATE_REPORTING_FLAG_COLUMN, DATE_REPORTING_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
 
 # --------------------------------------------------------------------------------------
 # UCI Online Retail II (GBP) -- separate domain. NO relationship to any Olist table.
@@ -458,8 +462,10 @@ growth = ["VAR _current = [GMV]",
 if DATE_COMPLETE_FLAG_COLUMN:
     growth += [f"VAR _currentIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), KEEPFILTERS ( 'Date'[{DATE_COMPLETE_FLAG_COLUMN}] = FALSE () ) ) > 0",
                f"VAR _previousIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), DATEADD ( 'Date'[Date], -1, MONTH ), KEEPFILTERS ( 'Date'[{DATE_COMPLETE_FLAG_COLUMN}] = FALSE () ) ) > 0"]
+growth += [f"VAR _currentNotReporting = CALCULATE ( COUNTROWS ( 'Date' ), KEEPFILTERS ( 'Date'[{DATE_REPORTING_FLAG_COLUMN}] = FALSE () ) ) > 0",
+           f"VAR _previousNotReporting = CALCULATE ( COUNTROWS ( 'Date' ), DATEADD ( 'Date'[Date], -1, MONTH ), KEEPFILTERS ( 'Date'[{DATE_REPORTING_FLAG_COLUMN}] = FALSE () ) ) > 0"]
 growth_cond = "ISBLANK ( _current ) || ISBLANK ( _previous ) || _previous = 0" + (
-    " || _currentIncomplete || _previousIncomplete" if DATE_COMPLETE_FLAG_COLUMN else "")
+    " || _currentIncomplete || _previousIncomplete" if DATE_COMPLETE_FLAG_COLUMN else "") + " || _currentNotReporting || _previousNotReporting"
 growth += ["RETURN", f"    IF ( {growth_cond}, BLANK (), DIVIDE ( _current - _previous, _previous ) )"]
 
 HIDDEN_MEASURES = {"DQ Status Colour"}
@@ -474,6 +480,8 @@ MEASURES = [
     ("Sales", "Net GMV", "KPI_NET_GMV", "SUPPORTED", BRL,
      ["CALCULATE (", "    [GMV],", "    KEEPFILTERS ( NOT 'Order'[order_status] IN { \"canceled\", \"unavailable\" } )", ")"],
      "GMV of orders not canceled/unavailable."),
+    ("Sales", "GMV Excluded from Net", "KPI_NET_GMV", "DERIVED", BRL, ["[GMV] - [Net GMV]"],
+     "DERIVED supporting measure for KPI_NET_GMV: GMV of canceled/unavailable orders (GMV - Net GMV). Shown on a secondary axis because the gap is about 0.7% of GMV."),
     ("Sales", "Freight Value", "KPI_FREIGHT", "SUPPORTED", BRL, ["SUM ( 'Order Item'[freight_value] )"],
      "Freight charged to customers (customer freight, not logistics cost)."),
     ("Sales", "Freight Share %", "KPI_FREIGHT_SHARE", "SUPPORTED", PCT, ["DIVIDE ( [Freight Value], [GMV] )"],
@@ -481,6 +489,7 @@ MEASURES = [
     ("Sales", "GMV Growth %", "KPI_GMV_GROWTH", "PARTIAL", PCT, growth,
      "Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank"
      + (" or when the current or prior month is not complete (dim_date.is_complete_month = false)." if DATE_COMPLETE_FLAG_COLUMN else "; partial-month suppression disabled.")
+     + " Also BLANK when the current or prior month is not a reporting month (dim_date.is_reporting_month = false; stricter than kpis.yaml, which names is_complete_month and says is_reporting_month governs the default report range)."
      + " PARTIAL: first/last coverage months are partial and sparse."),
     ("Payments", "Payment Value", "KPI_PAYMENT_VALUE", "SUPPORTED", BRL, ["SUM ( 'Payment'[payment_value] )"],
      "Sum of recorded payments. Transaction value, not sales, not cash flow; does not reconcile to items+freight for some orders."),
@@ -903,6 +912,7 @@ PARTIAL_GROWTH = "Partial: 2016 and late-2018 coverage incomplete"
 PARTIAL_RETENTION = "Partial: low repeat base; 2016/late-2018 incomplete"
 PARTIAL_HANDOVER = "Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time."
 AMBER = "#F59E0B"
+OLIST_REPORTING_ONLY = [("Date", "is_reporting_month", True)]  # excludes 2016-09..12 and 2018-09/10 partial or sparse months
 
 
 def page_name(pid: str) -> str:
@@ -1019,8 +1029,9 @@ cards(ex, [("GMV", "GMV (BRL)"), ("Orders", "Orders"), ("AOV", "AOV (BRL)"),
            ("Avg Review Score", "Avg Review Score (1-5)"), ("On-Time Delivery %", "On-Time Delivery %")])
 exec_view = [
     ex.add("trend", "lineChart", (24, CONTENT_Y, 776, 240),
-           {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV"), ("m", M, "Net GMV")]},
-           "Monthly GMV vs Net GMV (BRL)", sort=("c", "Date", "Year Month", "Ascending")),
+           {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV")], "Y2": [("m", M, "GMV Excluded from Net")]},
+           "Monthly GMV and GMV excluded from Net GMV (BRL)",
+           subtitle="Right axis: canceled/unavailable orders (GMV - Net GMV), about 0.7% of GMV overall; reporting months only", sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY),
     ex.add("state", "clusteredBarChart", (812, CONTENT_Y, 444, 496),
            {"Category": [("c", "Geography", "State")], "Y": [("m", M, "GMV")]},
            "GMV by customer state", sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_STATE),
@@ -1029,7 +1040,7 @@ exec_view = [
            "Top categories by GMV", sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_CATEGORY),
     ex.add("growth", "clusteredColumnChart", (416, 464, 384, 244),
            {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV Growth %")]},
-           "GMV Growth % (MoM)", subtitle=PARTIAL_GROWTH, sort=("c", "Date", "Year Month", "Ascending")),
+           "GMV Growth % (MoM)", subtitle=PARTIAL_GROWTH, sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY),
 ]
 detail_view = [
     ex.add("detail-table", "tableEx", (24, CONTENT_Y, 1232, 496),
@@ -1037,7 +1048,7 @@ detail_view = [
                        ("m", M, "AOV"), ("m", M, "Cancellation Rate %"), ("m", M, "On-Time Delivery %"),
                        ("m", M, "Avg Delivery Days"), ("m", M, "Avg Review Score"), ("m", M, "GMV Growth %")]},
            "Monthly scorecard (GMV Growth %: partial coverage)", subtitle=PARTIAL_GROWTH,
-           sort=("c", "Date", "Year Month", "Ascending"), hidden=True),
+           sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY, hidden=True),
 ]
 BM_EXEC, BM_DETAIL = "bm-executive-view", "bm-detail-view"
 for bname, label, x in ((BM_EXEC, "Executive view", 760), (BM_DETAIL, "Detail view", 900)):
@@ -1065,7 +1076,7 @@ cards(sp, [("GMV", "GMV (BRL)"), ("Net GMV", "Net GMV (BRL)"), ("Items per Order
            ("Freight Share %", "Freight Share % (customer freight)"), ("Cancellation Rate %", "Cancellation Rate %"),
            ("Repeat Purchase Rate %", "Repeat Purchase Rate % (within selected period)", PARTIAL_RETENTION)])
 sp.add("trend", "lineChart", (24, CONTENT_Y, 616, 236), {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV")]},
-       "GMV trend (BRL)", sort=("c", "Date", "Year Month", "Ascending"))
+       "GMV trend (BRL)", sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY)
 sp.add("category", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
        {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]}, "GMV by category",
        sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_CATEGORY)
@@ -1092,7 +1103,7 @@ cards(ci, [("Active Customers", "Active Customers"), ("New Customers", "New Cust
            ("Retention Cohort Size", "Retention Cohort Size (prior-month active)", PARTIAL_RETENTION)])
 ci.add("trend", "lineChart", (24, CONTENT_Y, 616, 236),
        {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "Active Customers"), ("m", M, "New Customers")]},
-       "Active vs new customers by month (new = first-order cohort size)", sort=("c", "Date", "Year Month", "Ascending"))
+       "Active vs new customers by month (new = first-order cohort size)", sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY)
 ci.add("region", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
        {"Category": [("c", "Geography", "Region")], "Y": [("m", M, "Active Customers")]}, "Active customers by region",
        sort=("m", M, "Active Customers", "Descending"))
@@ -1103,7 +1114,7 @@ ci.add("retention", "tableEx", (24, 460, 928, 248),
        {"Values": [("c", "Date", "Year Month"), ("m", M, "Active Customers"), ("m", M, "New Customers"),
                    ("m", M, "Repeat Purchase Rate %"), ("m", M, "Customer Retention %"), ("m", M, "Retention Cohort Size")]},
        "Monthly retention with cohort size (repeat rate within each month)", subtitle=PARTIAL_RETENTION,
-       sort=("c", "Date", "Year Month", "Ascending"))
+       sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY)
 PAGES.append(ci)
 
 # ---- Product Performance
@@ -1137,7 +1148,7 @@ cards(op, [("On-Time Delivery %", "On-Time Delivery %"), ("Avg Delivery Days", "
 op.add("otd-trend", "lineChart", (24, CONTENT_Y, 616, 236),
        {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "On-Time Delivery % (by Delivery Date)")]},
        "On-time delivery % by delivery month (estimate is Olist's, not a contractual SLA)",
-       sort=("c", "Date", "Year Month", "Ascending"))
+       sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY)
 op.add("otd-state", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
        {"Category": [("c", "Geography", "State")], "Y": [("m", M, "On-Time Delivery %")]},
        "On-time % by customer state", sort=("m", M, "On-Time Delivery %", "Ascending"), tooltip_page=TOOLTIP_STATE)
@@ -1216,7 +1227,7 @@ cards(sd, [("GMV", "GMV (BRL)"), ("Orders", "Orders", SUB_THIS_SELLER), ("AOV", 
            ("On-Time Delivery %", "On-Time Delivery %", SUB_THIS_SELLER),
            ("Avg Review Score", "Avg Review Score of orders containing seller")])
 sd.add("trend", "lineChart", (24, CONTENT_Y, 616, 236), {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV")]},
-       "Seller GMV trend", sort=("c", "Date", "Year Month", "Ascending"))
+       "Seller GMV trend", sort=("c", "Date", "Year Month", "Ascending"), filters=OLIST_REPORTING_ONLY)
 sd.add("categories", "clusteredBarChart", (652, CONTENT_Y, 604, 236),
        {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]}, "Top categories for this seller",
        sort=("m", M, "GMV", "Descending"))
