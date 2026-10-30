@@ -15,12 +15,13 @@ import pytest
 
 from ingestion.config import Settings
 from ingestion.loaders import LoadStatus, row_hash
-from ingestion.pipeline import apply_ddl, connect, load_source, run_olist
-from ingestion.sources import OLIST_CONTRACTS, get_contract
+from ingestion.pipeline import apply_ddl, connect, load_contract_files, load_file, load_source, run_olist
+from ingestion.sources import OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II, get_contract
 
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "olist"
+UCI_FIXTURES = ROOT / "tests" / "fixtures" / "uci"
 
 
 # These tests REPLACE raw tables with fixtures, so they run against a dedicated test database
@@ -101,3 +102,30 @@ def test_audit_records_runs(conn: psycopg.Connection) -> None:
         "from raw._load_audit"
     ).fetchone()
     assert row is not None and row[0] > 0 and row[1] == 0
+
+
+def test_uci_files_load_independently_with_line_numbers(conn: psycopg.Connection, tmp_path: Path) -> None:
+    contract = UCI_ONLINE_RETAIL_II
+    results = load_contract_files(conn, contract, UCI_FIXTURES, force=True)
+    assert [r.rows_loaded for r in results] == [6, 3]  # exact duplicate kept in raw (dropped in dbt)
+    rows = conn.execute(
+        'select _source_file, _source_line_no, "Invoice", "Customer ID" '
+        "from raw.uci_online_retail_ii_lines order by 1, 2"
+    ).fetchall()
+    first = [r for r in rows if r[0].endswith("2009-2010.csv")]
+    assert [r[1] for r in first] == [1, 2, 3, 4, 5, 6]
+    assert first[0][2] == "489434" and first[4][3] is None  # COPY CSV: unquoted empty field -> NULL
+    # reloading ONE changed file must not touch the other file's rows
+    for name in contract.file_names:
+        shutil.copy(UCI_FIXTURES / name, tmp_path / name)
+    with (tmp_path / contract.file_names[1]).open("a", encoding="utf-8", newline="") as fh:
+        fh.write("536368,22000,TEST ITEM,1,2011-02-01 10:00:00,1.00,17850.0,United Kingdom\n")
+    second = load_contract_files(conn, contract, tmp_path)
+    assert [r.status for r in second] == [LoadStatus.SKIPPED, LoadStatus.SUCCESS]
+    counts = dict(
+        conn.execute(
+            "select _source_file, count(*) from raw.uci_online_retail_ii_lines group by 1"
+        ).fetchall()
+    )
+    assert counts == {contract.file_names[0]: 6, contract.file_names[1]: 4}
+    load_file(conn, contract, UCI_FIXTURES / contract.file_names[1], force=True)

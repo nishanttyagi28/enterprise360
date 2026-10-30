@@ -31,8 +31,10 @@ create table if not exists dq.dq_results_log (
 );
 {% endmacro %}
 
-{% macro _dq_layer(model_name, resource_type) %}
-    {%- if resource_type == 'source' -%}source
+{% macro _dq_layer(model_name, resource_type, schema_name=none) %}
+    {#- UCI objects live in dedicated schemas -> the schema IS the layer (uci_staging, uci_core, ...) -#}
+    {%- if schema_name and schema_name.startswith('uci_') -%}{{ schema_name }}
+    {%- elif resource_type == 'source' -%}source
     {%- elif model_name.startswith('stg_') -%}staging
     {%- elif model_name.startswith('int_') -%}intermediate
     {%- elif model_name.startswith('mart_') -%}marts
@@ -55,12 +57,14 @@ create table if not exists dq.dq_results_log (
     {% for d in node.depends_on.nodes if d.split('.')[0] in ('model', 'source', 'snapshot') %}{% do deps.append(d) %}{% endfor %}
     {# singular tests: attribute to the most downstream layer referenced (mart > fct/dim > int > stg) #}
     {% set ranked = [] %}
-    {% for prefix in ['.mart_', '.fct_', '.dim_', '.dq_', '.int_', '.'] %}
+    {% for prefix in ['.mart_', '.uci_mart_', '.fct_', '.uci_fct_', '.dim_', '.uci_dim_', '.dq_', '.int_', '.'] %}
       {% for d in deps if prefix in d and d not in ranked %}{% do ranked.append(d) %}{% endfor %}
     {% endfor %}
     {% set target_id = node.attached_node or (ranked[0] if ranked else none) %}
     {% set rtype = target_id.split('.')[0] if target_id else 'model' %}
     {% set model_name = target_id.split('.')[-1] if target_id else none %}
+    {% set target_node = (graph.nodes.get(target_id) or graph.sources.get(target_id)) if target_id else none %}
+    {% set schema_name = target_node.schema if target_node else none %}
     {% set dbt_status = (r.status | string) | lower %}
     {# status mapping: pass->pass, warn->warn, fail/error->fail, skipped->fail (a check that did not
        run proved nothing; counting it as fail keeps the DQ score conservative) #}
@@ -68,7 +72,7 @@ create table if not exists dq.dq_results_log (
     {% set severity = 'block' if (node.config.severity | lower) == 'error' else 'warn' %}
     {% do rows.append("(" ~ _q(node.unique_id) ~ ", " ~ _q(node.name) ~ ", "
         ~ _q('generic' if node.test_metadata else 'singular') ~ ", "
-        ~ _q(_dq_layer(model_name or '', rtype)) ~ ", " ~ _q(model_name) ~ ", "
+        ~ _q(_dq_layer(model_name or '', rtype, schema_name)) ~ ", " ~ _q(model_name) ~ ", "
         ~ _q(severity) ~ ", " ~ _q(status) ~ ", " ~ _q(dbt_status) ~ ", "
         ~ (r.failures if r.failures is not none else 'null') ~ ", "
         ~ (r.execution_time | round(3)) ~ ")") %}

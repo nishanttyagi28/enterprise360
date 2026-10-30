@@ -1,0 +1,20 @@
+version: 2
+sources:
+  - name: uci
+    description: UCI ML Repository "Online Retail II" (UK online retailer, GBP), two yearly CSV exports, landed by `python -m ingestion uci`.
+    schema: raw
+    loaded_at_field: _ingested_at
+    freshness:
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 7, period: day}
+    tables:
+      - name: uci_online_retail_ii_lines
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [_source_file, _source_line_no]}
+        columns:
+          - name: Invoice
+            quote: true
+            tests: [not_null]
+          - name: StockCode
+            quote: true
+            tests: [not_null]

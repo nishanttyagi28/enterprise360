@@ -1,0 +1,21 @@
+version: 2
+models:
+  - name: stg_uci__invoice_lines_all
+    description: All raw lines typed, with is_exact_duplicate / is_superseded dedup flags.
+    columns:
+      - name: invoice_ts
+        tests: [not_null]
+      - name: quantity
+        tests: [not_null]
+      - name: unit_price
+        tests: [not_null]
+  - name: stg_uci__invoice_lines
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [_source_file, _source_line_no]}
+    columns:
+      - name: invoice
+        tests: [not_null]
+      - name: stock_code
+        tests: [not_null]
+      - name: country
+        tests: [not_null]

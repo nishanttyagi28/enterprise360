@@ -9,7 +9,13 @@ import pytest
 
 from ingestion.exceptions import ContractViolationError, SourceFileMissingError
 from ingestion.extractors import describe_file, read_header
-from ingestion.sources import OLIST_CONTRACTS, SourceContract, get_contract
+from ingestion.sources import (
+    OLIST_CONTRACTS,
+    UCI_ONLINE_RETAIL_II,
+    ReplaceScope,
+    SourceContract,
+    get_contract,
+)
 from ingestion.validators import validate_header
 
 pytestmark = pytest.mark.unit
@@ -60,10 +66,47 @@ def test_contract_rejects_bad_natural_key() -> None:
         SourceContract(name="x", file_name="x.csv", table="x", columns=("a",), natural_key=("b",))
 
 
-@pytest.mark.parametrize("contract", OLIST_CONTRACTS, ids=lambda c: c.name)
+DDL_FILES = {c.name: "010_raw_olist.sql" for c in OLIST_CONTRACTS} | {
+    UCI_ONLINE_RETAIL_II.name: "020_raw_uci.sql"
+}
+
+
+@pytest.mark.parametrize("contract", [*OLIST_CONTRACTS, UCI_ONLINE_RETAIL_II], ids=lambda c: c.name)
 def test_raw_ddl_in_sync_with_contracts(contract: SourceContract) -> None:
-    ddl = (ROOT / "database" / "ddl" / "010_raw_olist.sql").read_text(encoding="utf-8")
-    block = re.search(rf"create table if not exists raw\.{contract.table} \((.*?)\);", ddl, re.S)
+    ddl = (ROOT / "database" / "ddl" / DDL_FILES[contract.name]).read_text(encoding="utf-8")
+    block = re.search(rf"create table if not exists raw\.{contract.table} \((.*?)\n\);", ddl, re.S)
     assert block, contract.table
-    cols = [ln.strip().split()[0] for ln in block.group(1).splitlines() if ln.strip()]
+    cols = [
+        m.group(1).strip('"')
+        for ln in block.group(1).splitlines()
+        if (m := re.match(r'\s*("[^"]+"|\w+)\s', ln)) and m.group(1) != "primary"
+    ]
     assert tuple(c for c in cols if not c.startswith("_")) == contract.columns
+    if contract.track_line_numbers:
+        assert "_source_line_no" in cols
+
+
+@pytest.mark.parametrize("name", UCI_ONLINE_RETAIL_II.file_names)
+def test_uci_fixture_headers_match_contract(name: str) -> None:
+    header, has_bom = read_header(ROOT / "tests" / "fixtures" / "uci" / name)
+    validate_header(UCI_ONLINE_RETAIL_II, header)
+    assert not has_bom
+
+
+def test_uci_contract_is_file_scoped_with_line_numbers() -> None:
+    assert UCI_ONLINE_RETAIL_II.replace_scope is ReplaceScope.FILE
+    assert UCI_ONLINE_RETAIL_II.track_line_numbers
+    assert "Customer ID" in UCI_ONLINE_RETAIL_II.columns
+    assert len(UCI_ONLINE_RETAIL_II.file_names) == 2
+
+
+def test_multi_file_contract_requires_file_scope() -> None:
+    with pytest.raises(ValueError, match="replace_scope"):
+        SourceContract(
+            name="x",
+            file_name="a.csv",
+            extra_file_names=("b.csv",),
+            table="x",
+            columns=("a",),
+            natural_key=("a",),
+        )

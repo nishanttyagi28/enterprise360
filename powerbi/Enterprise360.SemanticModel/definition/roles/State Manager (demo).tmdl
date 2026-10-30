@@ -6,4 +6,6 @@ role 'State Manager (demo)'
 
 	tablePermission 'DQ Results' = FALSE ()
 
+	tablePermission 'DQ Run Summary' = FALSE ()
+
 	annotation PBI_Id = e3f17bcfa6c2501fa0e9242e5bf03c1a

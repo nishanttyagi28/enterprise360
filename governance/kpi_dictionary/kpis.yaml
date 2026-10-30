@@ -1,5 +1,17 @@
 dataset: Olist Brazilian E-Commerce Public Dataset (Kaggle olistbr/brazilian-ecommerce)
 currency: BRL
+filter_behaviour_notes:
+- id: FBN_ORDER_LEVEL_UNDER_LINE_FILTERS
+  title: Order-level KPIs under Product or Seller filters
+  applies_to:
+  - KPI_ORDERS
+  - KPI_OTD_RATE
+  - KPI_DELIVERY_DAYS
+  - KPI_REVIEW_SCORE
+  - KPI_APPROVAL_HOURS
+  note: Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg Delivery Days, Avg Review Score, Avg Approval Hours) count orders containing a matching line. Multi-category or multi-seller
+    orders count once per category or seller, so totals across categories/sellers are not additive and none are shown implying additivity. Review score by category is 'Avg Review Score of orders containing
+    category', not a product rating.
 kpis:
 - id: KPI_GMV
   name: Gross Merchandise Value
@@ -49,6 +61,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_gmv.sql (reconciliation reference only)
     power_bi_dax: '[GMV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_GMV_INCL_FREIGHT
   name: GMV incl. Freight
   status: SUPPORTED
@@ -88,6 +101,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_gmv_incl_freight.sql (reconciliation reference only)
     power_bi_dax: '[GMV incl Freight]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_NET_GMV
   name: Net GMV (excl. canceled/unavailable)
   status: SUPPORTED
@@ -129,6 +143,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_net_gmv.sql (reconciliation reference only)
     power_bi_dax: '[Net GMV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_FREIGHT
   name: Freight Value
   status: SUPPORTED
@@ -167,6 +182,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_freight.sql (reconciliation reference only)
     power_bi_dax: '[Freight Value]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_FREIGHT_SHARE
   name: Freight Share of GMV
   status: SUPPORTED
@@ -205,6 +221,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_freight_share.sql (reconciliation reference only)
     power_bi_dax: '[Freight Share %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_PAYMENT_VALUE
   name: Payment Value
   status: SUPPORTED
@@ -248,6 +265,29 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_payment_value.sql (reconciliation reference only)
     power_bi_dax: '[Payment Value]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Payment Mix %]'
+    purpose: Share of payment value by payment type; labelled payment mix, never sales
+    kind: breakdown
+  - measure: '[Payment Records]'
+    purpose: Count of payment rows (order_id, payment_sequential)
+    kind: breakdown
+  - measure: '[Payment Mismatch Orders]'
+    purpose: Orders with |payment − (items+freight)| > 0.01 BRL, exact numeric; currently 1,076. Payments without items drop out under product or seller filters (no item lines to match).
+    kind: dq_exclusion
+  - measure: '[Payment Without Items Orders]'
+    purpose: Data Quality page; currently 772. Payments without items drop out under product or seller filters (no item lines to match).
+    kind: dq_exclusion
+  - measure: '[Overpaid Orders]'
+    purpose: Data Quality page; currently 264
+    kind: dq_exclusion
+  - measure: '[Underpaid Orders]'
+    purpose: Data Quality page; currently 39
+    kind: dq_exclusion
+  - measure: '[Items Without Payment Orders]'
+    purpose: Data Quality page; currently 1
+    kind: dq_exclusion
 - id: KPI_ORDERS
   name: Orders
   status: SUPPORTED
@@ -287,6 +327,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_orders.sql (reconciliation reference only)
     power_bi_dax: '[Orders]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_AOV
   name: Average Order Value
   status: SUPPORTED
@@ -326,6 +367,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_aov.sql (reconciliation reference only)
     power_bi_dax: '[AOV]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_ITEMS_PER_ORDER
   name: Items per Order
   status: SUPPORTED
@@ -364,6 +406,11 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_items_per_order.sql (reconciliation reference only)
     power_bi_dax: '[Items per Order]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Items Sold]'
+    purpose: 'Numerator: order lines (=units)'
+    kind: breakdown
 - id: KPI_CANCEL_RATE
   name: Cancellation Rate
   status: SUPPORTED
@@ -406,6 +453,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_cancel_rate.sql (reconciliation reference only)
     power_bi_dax: '[Cancellation Rate %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_ACTIVE_CUSTOMERS
   name: Active Customers
   status: SUPPORTED
@@ -446,6 +494,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_active_customers.sql (reconciliation reference only)
     power_bi_dax: '[Active Customers]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_NEW_CUSTOMERS
   name: New Customers
   status: SUPPORTED
@@ -487,6 +536,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_new_customers.sql (reconciliation reference only)
     power_bi_dax: '[New Customers]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_REPEAT_RATE
   name: Repeat Purchase Rate
   status: SUPPORTED
@@ -528,6 +578,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_repeat_rate.sql (reconciliation reference only)
     power_bi_dax: '[Repeat Purchase Rate %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_OTD_RATE
   name: On-Time Delivery Rate
   status: SUPPORTED
@@ -571,6 +622,20 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_otd_rate.sql (reconciliation reference only)
     power_bi_dax: '[On-Time Delivery %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[On-Time Delivery % (by Delivery Date)]'
+    purpose: Same KPI, evaluated on the delivery-date role
+    kind: breakdown
+  - measure: '[Late Orders]'
+    purpose: Delivered after estimate
+    kind: breakdown
+  - measure: '[OTD Eligible Orders]'
+    purpose: 'Denominator: delivered with timestamp'
+    kind: breakdown
+  - measure: '[Delivered Missing Timestamp]'
+    purpose: Delivered status but no delivered_customer_at; excluded
+    kind: dq_exclusion
 - id: KPI_DELIVERY_DAYS
   name: Average Delivery Days
   status: SUPPORTED
@@ -613,6 +678,11 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_delivery_days.sql (reconciliation reference only)
     power_bi_dax: '[Avg Delivery Days]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Delivered Before Purchase]'
+    purpose: delivered_customer_at < purchased_at; excluded
+    kind: dq_exclusion
 - id: KPI_APPROVAL_HOURS
   name: Order Approval Time
   status: SUPPORTED
@@ -652,6 +722,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_approval_hours.sql (reconciliation reference only)
     power_bi_dax: '[Avg Approval Hours]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_REVIEW_SCORE
   name: Average Review Score
   status: SUPPORTED
@@ -694,6 +765,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_review_score.sql (reconciliation reference only)
     power_bi_dax: '[Avg Review Score]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_LOW_REVIEW_RATE
   name: Low Review Share
   status: SUPPORTED
@@ -735,6 +807,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_low_review_rate.sql (reconciliation reference only)
     power_bi_dax: '[Low Review %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_GMV_GROWTH
   name: GMV Growth %
   status: PARTIAL
@@ -776,6 +849,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_gmv_growth.sql (reconciliation reference only)
     power_bi_dax: '[GMV Growth %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_CUSTOMER_RETENTION
   name: Customer Retention Rate
   status: PARTIAL
@@ -818,29 +892,40 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_customer_retention.sql (reconciliation reference only)
     power_bi_dax: '[Customer Retention %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Retention Cohort Size]'
+    purpose: Cohort denominator shown beside the rate
+    kind: breakdown
 - id: KPI_DQ_SCORE
   name: Data Quality Score
   status: SUPPORTED
-  definition: Severity-weighted pass share of DQ checks per run.
-  formula: Σ(pass×weight)/Σ(weight)
-  numerator: weighted passes
-  denominator: weighted checks
+  definition: 'Strict severity-weighted DQ score for a dbt run: only status ''pass'' earns weight; ''warn'' counts as not-pass (earns 0); skipped counts as fail. Weights: block=3, warn=1 (dq_check_config
+    default). Default view = latest run (is_latest_run).'
+  formula: Σ(weight where status='pass') / Σ(weight)
+  numerator: Σ weight of passed checks
+  denominator: Σ weight of all executed checks
   unit: percent
   source:
-  - core.dq_results
+  - core.dq_run_summary (primary, one row per run_id)
+  - core.dq_results (check-level detail)
   source_tag: CONFIRMED (Olist columns from CSV headers; dbt model/column names verified against dbt_enterprise360/models on 2026-10-30)
   fact_dependencies:
+  - core.dq_run_summary
   - core.dq_results
   dimension_dependencies:
   - dim_date
-  grain: check × run
+  grain: run_id
   refresh: daily batch after ingestion + dbt build
   owner: Data Platform Lead
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - weights per 16 DQ framework
-  version: 1.1.0
+  - 'core.dq_run_summary.dq_score == Σ(pass×weight)/Σ(weight) over core.dq_results for the same run_id (verified 2026-10-30 latest run: 505/506 = 0.9980)'
+  - warn earns 0; skipped → fail
+  - default filter is_latest_run = true
+  - weights block=3, warn=1 unless overridden in dq_check_config
+  version: 1.2.0
   change_log:
   - version: 1.0.0
     date: '2026-10-30'
@@ -852,11 +937,33 @@ kpis:
     author: KPI & Quality
     change: names confirmed vs DE models; payments exception counts; GMV growth uses is_complete_month
     pr: TBD
+  - version: 1.2.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Primary source core.dq_run_summary; strict definition (warn=not-pass, skipped=fail, block=3/warn=1, latest run)
+    pr: TBD
   implementations:
-    dbt: core.dq_results
+    dbt: core.dq_run_summary.dq_score
     sql: dbt_enterprise360/analyses/kpi_dq_score.sql (reconciliation reference only)
     power_bi_dax: '[DQ Score %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Checks Failed]'
+    purpose: Failed checks, latest run
+    kind: breakdown
+  - measure: '[Checks Warned]'
+    purpose: Warned checks (earn 0 in strict score)
+    kind: breakdown
+  - measure: '[Blocking Failures]'
+    purpose: Failed block-severity checks
+    kind: breakdown
+  - measure: '[Failing Rows]'
+    purpose: Rows returned by failing/warning checks
+    kind: breakdown
+  - measure: '[DQ Status Colour]'
+    purpose: Conditional-format helper; hidden; not a KPI
+    kind: formatting
 - id: KPI_RECON_VARIANCE
   name: Reconciliation Variance
   status: SUPPORTED
@@ -896,6 +1003,7 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_recon_variance.sql (reconciliation reference only)
     power_bi_dax: '[Reconciliation Variance]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
 - id: KPI_SELLER_HANDOVER_OTD
   name: Seller Handover On-Time Rate
   status: PARTIAL
@@ -943,3 +1051,448 @@ kpis:
     sql: dbt_enterprise360/analyses/kpi_seller_handover_otd.sql (reconciliation reference only)
     power_bi_dax: '[Seller Handover On-Time %]'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+  supporting_measures:
+  - measure: '[Handover Missing Timestamp]'
+    purpose: Items missing delivered_carrier_at or shipping_limit_at; excluded
+    kind: dq_exclusion
+- id: KPI_UCI_GROSS_SALES
+  name: UCI Gross Product Sales (Invoiced Value)
+  domain: uci
+  status: SUPPORTED
+  definition: 'Σ quantity × unit_price on qualifying product lines. Invoiced value, NOT recognized revenue (no tax, discount, cost or revenue-recognition data). Product lines only: line_type=''product''
+    via seed uci_stockcode_class (excludes POST, DOT, M/m, C2, D, S, BANK CHARGES, ADJUST, AMAZONFEE, CRUK, TEST001, PADS, B, gift_0001_*); non-cancellation invoices (Invoice not starting with ''C''); quantity>0
+    and unit_price>0 (price 0 / negative bad-debt ''A'' invoices and stock write-offs — non-C, qty<0, price 0 — excluded). Currency GBP only; never summed with Olist BRL. Staging dedup + file-overlap rule
+    per plan §3.'
+  formula: SUM(quantity*unit_price) WHERE line_type='product' AND NOT is_cancellation AND quantity>0 AND unit_price>0
+  numerator: —
+  denominator: —
+  unit: GBP
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: &id002
+  - uci_fct_invoice_lines
+  dimension_dependencies: &id003
+  - core.dim_date (or uci_dim_date, plan D2)
+  - uci_dim_product
+  - uci_dim_customer
+  - uci_dim_country
+  grain: invoice line
+  refresh: on file change (static historical source)
+  owner: Head of Sales (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - never named 'Revenue'
+  - 'exact numeric: Σ fact line_value == Σ staging qty×price for the same filter (tolerance 0.00)'
+  - 'verified on raw 2026-10-30: £19,644,592.67 after dedup/overlap (for reconciliation only, not a target)'
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_fct_invoice_lines.line_value
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_gross_sales.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Gross Sales] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_NET_SALES_PROXY
+  name: UCI Net Sales Proxy (Invoiced Value net of cancellations)
+  domain: uci
+  status: PARTIAL
+  definition: 'KPI_UCI_GROSS_SALES plus signed cancellation product lines (C invoices, negative). Proxy only, NOT revenue: cancellations are not confirmed returns, discounts (D), postage and fees are reported
+    separately (plan D3 open).'
+  formula: GROSS_SALES + SUM(quantity*unit_price) WHERE line_type='product' AND is_cancellation
+  numerator: —
+  denominator: —
+  unit: GBP
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id002
+  dimension_dependencies: *id003
+  grain: invoice line
+  refresh: on file change (static historical source)
+  owner: Head of Sales (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - Net ≤ Gross
+  - C-invoice lines must have quantity ≤ 0 (1 known exception, warn)
+  - label 'Net Sales (proxy)'
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_sales_daily.net_sales_proxy
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_net_sales_proxy.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Net Sales Proxy] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_INVOICES
+  name: UCI Sales Invoices
+  domain: uci
+  status: SUPPORTED
+  definition: Distinct non-cancellation invoices containing ≥1 qualifying product line.
+  formula: COUNT(DISTINCT invoice) WHERE NOT is_cancellation AND qualifying product line
+  numerator: —
+  denominator: —
+  unit: count
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: &id004
+  - uci_fct_invoices
+  dimension_dependencies: *id003
+  grain: invoice
+  refresh: on file change (static historical source)
+  owner: Head of Sales (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - uci_fct_invoices rollup == lines (tolerance 0)
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_fct_invoices
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_invoices.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Invoices] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_AOV
+  name: UCI Average Invoice Value
+  domain: uci
+  status: SUPPORTED
+  definition: Gross product sales per sales invoice.
+  formula: KPI_UCI_GROSS_SALES / KPI_UCI_INVOICES
+  numerator: GROSS_SALES
+  denominator: INVOICES
+  unit: GBP
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id004
+  dimension_dependencies: *id003
+  grain: invoice (non-additive)
+  refresh: on file change (static historical source)
+  owner: Head of Sales (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - ratio of sums
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_sales_daily
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_aov.sql (reconciliation reference only)
+    power_bi_dax: '[UCI AOV] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_CANCEL_RATE_VALUE
+  name: UCI Cancellation Rate (by value)
+  domain: uci
+  status: SUPPORTED
+  definition: '|Cancelled product value| / gross product value. Cancellation, NOT a confirmed return rate.'
+  formula: ABS(SUM(line_value) WHERE is_cancellation AND product) / GROSS_SALES
+  numerator: '|cancelled value|'
+  denominator: gross value
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id002
+  dimension_dependencies: *id003
+  grain: invoice line
+  refresh: on file change (static historical source)
+  owner: Head of Operations (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'no link C→original invoice: period rate only, not per-order'
+  - 0..1 expected; >1 possible at fine grain (cancellation of earlier-period sales) — show with caution
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_product_monthly
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_cancel_rate_value.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Cancellation Rate % (Value)] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_CANCEL_RATE_LINES
+  name: UCI Cancellation Rate (by lines)
+  domain: uci
+  status: SUPPORTED
+  definition: Cancellation product lines / all product lines (sales + cancellation).
+  formula: COUNT(lines WHERE is_cancellation)/COUNT(product lines)
+  numerator: C lines
+  denominator: product lines
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id002
+  dimension_dependencies: *id003
+  grain: invoice line
+  refresh: on file change (static historical source)
+  owner: Head of Operations (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 0..1
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_fct_invoice_lines
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_cancel_rate_lines.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Cancellation Rate % (Lines)] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_ACTIVE_CUSTOMERS
+  name: UCI Active Customers
+  domain: uci
+  status: SUPPORTED
+  definition: Distinct identified Customer IDs with ≥1 sales invoice in period. Rows without Customer ID (22.8% of deduped rows, verified 2026-10-30) excluded; customer KPIs cover identified customers only
+    — share shown alongside.
+  formula: COUNT(DISTINCT customer_id) WHERE has_customer
+  numerator: —
+  denominator: —
+  unit: count
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id004
+  dimension_dependencies:
+  - uci_dim_customer
+  - core.dim_date
+  grain: customer × period (non-additive)
+  refresh: on file change (static historical source)
+  owner: Head of CRM (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - unknown member (-1) excluded
+  - Customer ID cast float→int (13085.0 → 13085)
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_sales_daily.active_customers
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_active_customers.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Active Customers] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_REPEAT_RATE
+  name: UCI Repeat Customer Rate
+  domain: uci
+  status: SUPPORTED
+  definition: Share of identified customers with ≥2 distinct sales invoices over the stated window (default full coverage 2009-12-01 → 2011-12-09). Rows without Customer ID (22.8% of deduped rows, verified
+    2026-10-30) excluded; customer KPIs cover identified customers only — share shown alongside.
+  formula: customers ≥2 invoices / customers
+  numerator: repeat customers
+  denominator: identified customers
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id004
+  dimension_dependencies:
+  - uci_dim_customer
+  grain: customer × window
+  refresh: on file change (static historical source)
+  owner: Head of CRM (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - window stated on visual
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_dim_customer
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_repeat_rate.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Repeat Rate %] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_RFM_SEGMENT
+  name: UCI RFM Segment
+  domain: uci
+  status: PARTIAL
+  definition: 'Descriptive segmentation, NOT a prediction. Snapshot date = max(InvoiceDate) in data + 1 day (2011-12-10). R = days since last sales invoice, F = distinct sales invoices, M = gross product
+    sales (GBP); each scored 1–5 by quintile (NTILE(5); R reversed so recent=5) over identified customers. Segment labels from documented R/F score rules. PARTIAL: identified customers only; monetary excludes
+    cancellations netting decision.'
+  formula: NTILE(5) per R,F,M at snapshot; segment = rule map on (R,F)
+  numerator: —
+  denominator: —
+  unit: segment
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id004
+  dimension_dependencies:
+  - uci_dim_customer
+  grain: customer at snapshot
+  refresh: on file change (static historical source)
+  owner: Head of CRM (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - snapshot date stored on mart row
+  - quintile ties broken deterministically by customer_id
+  - segment counts sum to identified customers
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_customer_rfm
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_rfm_segment.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Customers by RFM Segment] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_COHORT_RETENTION
+  name: UCI Cohort Retention
+  domain: uci
+  status: PARTIAL
+  definition: 'Share of a monthly first-purchase cohort (identified customers) with a sales invoice in month n after first purchase. PARTIAL: 2009-12 has no history so early ''new'' customers may be existing;
+    2011-12 partial (to 2011-12-09) — flagged via uci_int_month_coverage; 22.8% rows lack Customer ID.'
+  formula: active cohort members in month n / cohort size
+  numerator: retained
+  denominator: cohort size
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id004
+  dimension_dependencies:
+  - uci_dim_customer
+  - core.dim_date
+  grain: cohort month × months since
+  refresh: on file change (static historical source)
+  owner: Head of CRM (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - month 0 = 100% of cohort
+  - partial months flagged, blank in trend
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_customer_cohorts
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_cohort_retention.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Cohort Retention %] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_PRODUCT_CONTRIBUTION
+  name: UCI Product Contribution %
+  domain: uci
+  status: SUPPORTED
+  definition: Product share of gross product sales.
+  formula: GROSS_SALES(product) / GROSS_SALES(all)
+  numerator: product sales
+  denominator: total
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id002
+  dimension_dependencies:
+  - uci_dim_product
+  grain: StockCode × period
+  refresh: on file change (static historical source)
+  owner: Head of Merchandising (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - shares sum to 100% within filter
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_product_monthly
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_product_contribution.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Product Contribution %] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_UCI_COUNTRY_CONTRIBUTION
+  name: UCI Country Contribution %
+  domain: uci
+  status: SUPPORTED
+  definition: Country share of gross product sales. UK dominates (~85.5% of gross product value on raw 2026-10-30) — show non-UK view too. 'Unspecified' kept as its own member.
+  formula: GROSS_SALES(country)/GROSS_SALES(all)
+  numerator: country sales
+  denominator: total
+  unit: percent
+  source:
+  - raw.uci_online_retail_ii_lines (Invoice, StockCode, Quantity, InvoiceDate, Price, "Customer ID", Country)
+  source_tag: ASSUMPTION (uci_* models not built yet; names from docs/blueprint/uci-online-retail-plan.md). Raw columns CONFIRMED from CSV headers 2026-10-30
+  fact_dependencies: *id002
+  dimension_dependencies:
+  - uci_dim_country
+  grain: country × period
+  refresh: on file change (static historical source)
+  owner: Head of Sales (UCI domain)
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - shares sum to 100%
+  - GBP only; no join to any Olist core.* object
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: UCI Online Retail II domain added
+    pr: TBD
+  implementations:
+    dbt: uci_mart_country_monthly
+    sql: dbt_enterprise360/analyses/uci/kpi_uci_country_contribution.sql (reconciliation reference only)
+    power_bi_dax: '[UCI Country Contribution %] (proposed; UCI model not built)'
+    streamlit: app/services/kpis.py → reads uci_marts; no recomputation

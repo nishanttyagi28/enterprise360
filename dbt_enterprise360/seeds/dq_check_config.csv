@@ -14,3 +14,21 @@ assert_grain_fct_orders,KPI_ORDERS,,core,grain protects order count
 assert_grain_fct_order_items,KPI_GMV,,core,grain protects GMV line sum
 assert_grain_fct_payments,KPI_PAYMENT_VALUE,,core,grain protects payment sum
 assert_no_fanout_order_items_dims,KPI_GMV,,core,dim joins must not multiply GMV lines
+assert_uci_grain_fct_invoice_lines,KPI_UCI_GROSS_SALES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_grain_fct_invoices,KPI_UCI_INVOICES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_grain_mart_customer_rfm,KPI_UCI_RFM_SEGMENT,,uci_marts,merged from seeds_proposed (KPI & Quality)
+assert_uci_recon_lines_vs_staging,KPI_UCI_GROSS_SALES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_recon_invoices_rollup,KPI_UCI_INVOICES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_recon_mart_sales_daily_vs_fact,KPI_UCI_GROSS_SALES,,uci_marts,merged from seeds_proposed (KPI & Quality)
+assert_uci_recon_mart_product_vs_fact,KPI_UCI_PRODUCT_CONTRIBUTION,,uci_marts,merged from seeds_proposed (KPI & Quality)
+assert_uci_no_fanout_lines_dims,KPI_UCI_GROSS_SALES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_cancellation_linkage,KPI_UCI_CANCEL_RATE_LINES,,uci_core,merged from seeds_proposed (KPI & Quality)
+assert_uci_dq_missing_customer_share,KPI_UCI_ACTIVE_CUSTOMERS,,uci_core,merged from seeds_proposed (KPI & Quality) - warn
+assert_uci_overlap_deduped,KPI_UCI_GROSS_SALES,,uci_staging,overlap dedup 2010-12-01..09 (rows before/after)
+assert_uci_exact_duplicates_dropped,KPI_UCI_GROSS_SALES,,uci_staging,within-file exact duplicates dropped (warn)
+assert_uci_superseded_rows_match_later_file,KPI_UCI_GROSS_SALES,,uci_staging,overlap rows identical in later file (warn)
+assert_uci_currency_gbp,KPI_UCI_GROSS_SALES,,uci_core,
+assert_uci_dq_duplicate_rows,KPI_UCI_GROSS_SALES,,uci_core,warn
+assert_uci_dq_negative_qty_non_c,KPI_UCI_GROSS_SALES,,uci_core,warn
+assert_uci_dq_price_le_zero,KPI_UCI_GROSS_SALES,,uci_core,warn
+assert_uci_grain_dim_%,,,uci_core,

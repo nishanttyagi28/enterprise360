@@ -83,13 +83,31 @@ table Order
 
 		annotation SummarizationSetBy = User
 
+	column has_items
+		dataType: boolean
+		isHidden
+		lineageTag: 7242b297-b88e-5771-a627-c4e806c6acaa
+		summarizeBy: none
+		sourceColumn: has_items
+
+		annotation SummarizationSetBy = User
+
+	column has_payment
+		dataType: boolean
+		isHidden
+		lineageTag: f6ae44fd-1de5-5d42-acea-af490203c0ec
+		summarizeBy: none
+		sourceColumn: has_payment
+
+		annotation SummarizationSetBy = User
+
 	partition Order = m
 		mode: import
 		source =
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchema, Item = "fct_orders"]}[Data],
-					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff"})
+					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff", "has_items", "has_payment"})
 				in
 					Selected
 

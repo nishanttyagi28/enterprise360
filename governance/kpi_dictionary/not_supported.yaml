@@ -2,30 +2,52 @@ not_supported:
 - kpis: Net/recognized revenue, Gross Profit, Gross Margin, Operating Profit/Margin, P&L, Cost per Order
   reason: No COGS, opex, invoicing, tax or GL in Olist
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Target Achievement, Budget vs Actual, Budget Variance
   reason: No real targets/budgets; fabrication prohibited
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: CAC, ROAS, CTR, Marketing ROI
   reason: No marketing spend/impressions in Olist (Marketing Funnel has leads/deals only, separate dataset)
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Return Rate / Refunds
   reason: No returns or refunds table
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Inventory Turnover, Stockout, Fill Rate, Ageing
   reason: No inventory or stock data
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Supplier/procurement KPIs (PPV, lead time, POs)
   reason: Sellers are marketplace merchants, not suppliers; no POs
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Headcount, Attrition, Absenteeism, Hiring, Payroll
   reason: No HR data in Olist
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Cash flow, AR/AP, Collections
   reason: Payments are transaction values, not cash settlement
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Complaint Resolution Time
   reason: No complaint/ticket data; reviews are not tickets
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
 - kpis: Margin-based CLV
   reason: No cost data; revenue-based CLV would need explicit 'GMV-based' label
   handling: excluded; shown as 'not available from source'; never synthesized
+  domain: olist
+- domain: uci
+  kpis: UCI Gross Profit / Margin
+  reason: No product cost/COGS in Online Retail II
+  handling: excluded; never synthesized
+- domain: uci
+  kpis: UCI True Return Rate
+  reason: Cancellation (C) invoices have no link to the original invoice and are not confirmed returns
+  handling: excluded; only cancellation rates published
+- domain: uci
+  kpis: UCI CAC / ROAS
+  reason: No marketing spend data
+  handling: excluded; never synthesized

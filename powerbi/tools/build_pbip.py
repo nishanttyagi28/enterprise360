@@ -23,6 +23,10 @@ V_BOOKMARK = "2.0.0"
 # returns BLANK when the current or prior month is not complete. Set to None to drop the check.
 DATE_COMPLETE_FLAG_COLUMN: str | None = "is_complete_month"
 
+# core.dq_run_summary (one row per dbt run, strict dq_score, is_latest_run). True = [DQ Score %] reads it;
+# False = fall back to the weighted calculation over core.dq_results.
+USE_DQ_RUN_SUMMARY = True
+
 
 def gid(*parts: str) -> str:
     return str(uuid.uuid5(NS, "|".join(parts)))
@@ -118,6 +122,8 @@ TABLES: list[dict] = [
             ("hours_to_approve", "hours_to_approve", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.0"}),
             ("Review Score", "latest_review_score", "int64", {"summarize": "none"}),
             ("payment_vs_items_diff", "payment_vs_items_diff", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+            ("has_items", "has_items", "boolean", {"hidden": True, "summarize": "none"}),
+            ("has_payment", "has_payment", "boolean", {"hidden": True, "summarize": "none"}),
         ],
     },
     {
@@ -249,6 +255,27 @@ TABLES.append({
     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"run_id", type text}, {"check_id", type text}, {"run_at", type datetime}, {"weight", type number}, {"failing_rows", Int64.Type}, {"source_value", type number}, {"mart_value", type number}, {"variance", type number}})'],
 })
 
+if USE_DQ_RUN_SUMMARY:
+    TABLES.append({
+        "name": "DQ Run Summary", "dbt": "dq_run_summary", "optional": True,
+        "desc": "core.dq_run_summary: one row per dbt run with strict weighted dq_score (warn earns 0) and is_latest_run. Standalone from the Olist star; filters DQ Results by run_id.",
+        "cols": [
+            ("Run ID", "run_id", "string", {"summarize": "none"}),
+            ("Run At", "run_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("Total Checks", "total_checks", "int64", {"summarize": "none"}),
+            ("Passed Checks", "passed_checks", "int64", {"summarize": "none"}),
+            ("Warned Checks", "warned_checks", "int64", {"summarize": "none"}),
+            ("Failed Checks", "failed_checks", "int64", {"summarize": "none"}),
+            ("Failed Blocking Checks", "failed_block_checks", "int64", {"summarize": "none"}),
+            ("total_weight", "total_weight", "double", {"hidden": True, "summarize": "none"}),
+            ("passed_weight", "passed_weight", "double", {"hidden": True, "summarize": "none"}),
+            ("warned_weight", "warned_weight", "double", {"hidden": True, "summarize": "none"}),
+            ("dq_score", "dq_score", "double", {"hidden": True, "summarize": "none", "fmt": "0.0%"}),
+            ("is_latest_run", "is_latest_run", "boolean", {"hidden": True, "summarize": "none"}),
+        ],
+        "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"run_id", type text}, {"run_at", type datetime}, {"total_checks", Int64.Type}, {"passed_checks", Int64.Type}, {"warned_checks", Int64.Type}, {"failed_checks", Int64.Type}, {"failed_block_checks", Int64.Type}, {"total_weight", type number}, {"passed_weight", type number}, {"warned_weight", type number}, {"dq_score", type number}, {"is_latest_run", type logical}})'],
+    })
+
 if DATE_COMPLETE_FLAG_COLUMN:
     _date = next(t for t in TABLES if t["name"] == "Date")
     _date["cols"].append((DATE_COMPLETE_FLAG_COLUMN, DATE_COMPLETE_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
@@ -256,7 +283,7 @@ if DATE_COMPLETE_FLAG_COLUMN:
 ROLES = [
     # DEMO ONLY: static filter. Geography -> Customer -> Order -> Order Item / Payment / Delivery.
     ("State Manager (demo)", "DEMO ONLY: static row filter to customer state SP. Replace with a user-to-state mapping table + USERPRINCIPALNAME() for production.",
-     [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")]),
+     [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")] + ([("DQ Run Summary", "FALSE ()")] if USE_DQ_RUN_SUMMARY else [])),
 ]
 
 # Relationships: (from table, from col [many], to table, to col [one], active)
@@ -270,6 +297,7 @@ RELS = [
     ("Order", "order_status", "Order Status", "order_status", True),
     ("Order", "purchase_date_key", "Date", "date_key", True),
     ("Customer", "customer_state", "Geography", "State", True),
+] + ([("DQ Results", "Run ID", "DQ Run Summary", "Run ID", True)] if USE_DQ_RUN_SUMMARY else []) + [
 ]
 
 BRL = "R$ #,0"
@@ -296,7 +324,11 @@ def line_aware(expr: list[str]) -> list[str]:
 
 def latest_run(expr: list[str]) -> list[str]:
     """DQ measure evaluated on the latest run unless a run (Run ID / Run At) is in the filter context."""
-    return (["VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )",
+    sel = "ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )"
+    if USE_DQ_RUN_SUMMARY:
+        sel += " || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )"
+    extra = ["        REMOVEFILTERS ( 'DQ Run Summary' ),"] if USE_DQ_RUN_SUMMARY else []
+    return ([f"VAR _runSelected = {sel}",
              "VAR _runAt =",
              "    IF (",
              "        _runSelected,",
@@ -306,7 +338,7 @@ def latest_run(expr: list[str]) -> list[str]:
              "RETURN",
              "    CALCULATE ("]
             + ["        " + e for e in expr[:-1]] + ["        " + expr[-1] + ","]
-            + ["        REMOVEFILTERS ( 'DQ Results'[Run ID] ),",
+            + extra + ["        REMOVEFILTERS ( 'DQ Results'[Run ID] ),",
                "        'DQ Results'[Run At] = _runAt", "    )"])
 
 
@@ -320,6 +352,7 @@ growth_cond = "ISBLANK ( _current ) || ISBLANK ( _previous ) || _previous = 0" +
 growth += ["RETURN", f"    IF ( {growth_cond}, BLANK (), DIVIDE ( _current - _previous, _previous ) )"]
 
 HIDDEN_MEASURES = {"DQ Status Colour"}
+MM = "KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 )"
 ELIG = "KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () )"
 MEASURES = [
     # (folder, name, kpi_id, status, fmt, expression lines, description)
@@ -411,9 +444,17 @@ MEASURES = [
      "Orders with latest score <= 2 / orders reviewed."),
     # ---- Data quality (core.dq_results, latest run unless a run is selected)
     ("Data Quality", "DQ Score %", "KPI_DQ_SCORE", "SUPPORTED", PCT,
-     latest_run(["DIVIDE (", "    CALCULATE ( SUM ( 'DQ Results'[weight] ), KEEPFILTERS ( 'DQ Results'[Status] = \"pass\" ) ),",
-                 "    SUM ( 'DQ Results'[weight] )", ")"]),
-     "Sum of weights of checks with status pass / sum of all weights (warn counts as not pass). Latest run_at unless a run is selected."),
+     (["VAR _runSelected = ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )",
+       "VAR _runAt =", "    IF (", "        _runSelected,", "        MAX ( 'DQ Run Summary'[Run At] ),",
+       "        CALCULATE ( MAX ( 'DQ Run Summary'[Run At] ), REMOVEFILTERS ( 'DQ Run Summary' ), 'DQ Run Summary'[is_latest_run] = TRUE () )",
+       "    )", "RETURN",
+       "    CALCULATE ( MAX ( 'DQ Run Summary'[dq_score] ), REMOVEFILTERS ( 'DQ Run Summary' ), 'DQ Run Summary'[Run At] = _runAt )"]
+      if USE_DQ_RUN_SUMMARY else
+      latest_run(["DIVIDE (", "    CALCULATE ( SUM ( 'DQ Results'[weight] ), KEEPFILTERS ( 'DQ Results'[Status] = \"pass\" ) ),",
+                  "    SUM ( 'DQ Results'[weight] )", ")"])),
+     ("Strict weighted DQ score from core.dq_run_summary.dq_score (only pass earns weight; warn and fail earn 0). Latest run (is_latest_run = TRUE) unless a run is selected; if several runs are selected, the latest of them."
+      if USE_DQ_RUN_SUMMARY else
+      "Sum of weights of checks with status pass / sum of all weights (warn counts as not pass). Latest run_at unless a run is selected.")),
     ("Data Quality", "Reconciliation Variance", "KPI_RECON_VARIANCE", "SUPPORTED", "#,0.00",
      latest_run(["SUMX (", "    FILTER ( 'DQ Results', NOT ISBLANK ( 'DQ Results'[source_value] ) ),",
                  "    'DQ Results'[mart_value] - 'DQ Results'[source_value]", ")"]),
@@ -437,7 +478,19 @@ MEASURES = [
      "Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden."),
     ("Data Quality", "Payment Mismatch Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
      ["CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )"],
-     "Supporting DQ measure from fct_orders: orders where |payments - (items+freight)| > 0.01 BRL (validation rule of KPI_PAYMENT_VALUE)."),
+     "Data-quality exception count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders."),
+    ("Data Quality", "Payment Without Items Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
+     [f"CALCULATE ( COUNTROWS ( 'Order' ), {MM}, KEEPFILTERS ( 'Order'[has_items] = FALSE () ) )"],
+     "Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): mismatched orders with payments but no order items."),
+    ("Data Quality", "Items Without Payment Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
+     [f"CALCULATE ( COUNTROWS ( 'Order' ), {MM}, KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = FALSE () ) )"],
+     "Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): mismatched orders with items but no payment record."),
+    ("Data Quality", "Overpaid Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
+     [f"CALCULATE ( COUNTROWS ( 'Order' ), {MM}, KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = TRUE () ), KEEPFILTERS ( 'Order'[payment_vs_items_diff] > 0 ) )"],
+     "Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): both sides present, payments exceed items+freight by > 0.01 BRL (e.g. installment interest)."),
+    ("Data Quality", "Underpaid Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
+     [f"CALCULATE ( COUNTROWS ( 'Order' ), {MM}, KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = TRUE () ), KEEPFILTERS ( 'Order'[payment_vs_items_diff] < 0 ) )"],
+     "Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): both sides present, payments below items+freight by > 0.01 BRL (e.g. vouchers/discounts)."),
     ("Data Quality", "Delivered Missing Timestamp", "KPI_OTD_RATE", "SUPPORTED", INT,
      ["CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[dq_missing_delivery_ts] = TRUE () ) )"],
      "Data-quality exclusion count, not an operational KPI: delivered orders without delivered_customer_at, excluded from OTD and delivery-days KPIs (fct_deliveries.dq_missing_delivery_ts)."),
@@ -897,7 +950,7 @@ PAGES.append(op)
 # ---- Data Quality
 dq = Page("data-quality", "Data Quality")
 header(dq, date_slicer=False)
-dq.add("slicer-run", "slicer", (24, 52, 320, 48), {"Values": [("c", "DQ Results", "Run At")]},
+dq.add("slicer-run", "slicer", (24, 52, 320, 48), {"Values": [("c", "DQ Run Summary" if USE_DQ_RUN_SUMMARY else "DQ Results", "Run At")]},
        "dbt run (default: latest)", objects={"data": [{"properties": {"mode": lit("Dropdown")}}]})
 cards(dq, [("DQ Score %", "DQ Score % (latest run)"), ("Blocking Failures", "Blocking failures"),
            ("Checks Failed", "Checks failed"), ("Checks Warned", "Checks warned"), ("Failing Rows", "Failing rows")])
@@ -913,10 +966,16 @@ dq.add("recon", "clusteredBarChart", (836, CONTENT_Y, 420, 300),
        {"Category": [("c", "DQ Results", "KPI ID")], "Y": [("m", M, "Reconciliation Variance")]},
        "Reconciliation variance by KPI (mart - source)", sort=("m", M, "Reconciliation Variance", "Descending"))
 dq.add("score-trend", "lineChart", (24, 524, 800, 184),
-       {"Category": [("c", "DQ Results", "Run At")], "Y": [("m", M, "DQ Score %")]}, "DQ Score % by run",
-       sort=("c", "DQ Results", "Run At", "Ascending"))
-dq.add("warehouse-checks", "multiRowCard", (836, 524, 420, 184),
-       {"Values": [("m", M, "Payment Mismatch Orders"), ("m", M, "Delivered Missing Timestamp"),
+       {"Category": [("c", "DQ Run Summary" if USE_DQ_RUN_SUMMARY else "DQ Results", "Run At")], "Y": [("m", M, "DQ Score %")]},
+       "DQ Score % by run (strict: warn earns 0)",
+       sort=("c", "DQ Run Summary" if USE_DQ_RUN_SUMMARY else "DQ Results", "Run At", "Ascending"))
+dq.add("payment-exceptions", "multiRowCard", (836, 524, 204, 184),
+       {"Values": [("m", M, "Payment Mismatch Orders"), ("m", M, "Payment Without Items Orders"), ("m", M, "Overpaid Orders"),
+                   ("m", M, "Underpaid Orders"), ("m", M, "Items Without Payment Orders")]},
+       "Payment vs items+freight exceptions (orders)",
+       subtitle="Payment-without-items orders don't appear under product or seller filters, so the four breakdowns won't sum to the mismatch total when filtered")
+dq.add("warehouse-checks", "multiRowCard", (1052, 524, 204, 184),
+       {"Values": [("m", M, "Delivered Missing Timestamp"),
                    ("m", M, "Delivered Before Purchase"), ("m", M, "Handover Missing Timestamp"), ("m", M, "OTD Eligible Orders"), ("m", M, "Orders"),
                    ("m", M, "Items Sold"), ("m", M, "Payment Records")]},
        "Warehouse checks from fct tables (purchase-date slicers do not apply here)")

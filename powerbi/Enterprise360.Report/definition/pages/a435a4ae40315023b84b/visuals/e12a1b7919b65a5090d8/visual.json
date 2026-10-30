@@ -20,13 +20,13 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "DQ Results"
+                      "Entity": "DQ Run Summary"
                     }
                   },
                   "Property": "Run At"
                 }
               },
-              "queryRef": "DQ Results.Run At",
+              "queryRef": "DQ Run Summary.Run At",
               "nativeQueryRef": "Run At"
             }
           ]
@@ -57,7 +57,7 @@
               "Column": {
                 "Expression": {
                   "SourceRef": {
-                    "Entity": "DQ Results"
+                    "Entity": "DQ Run Summary"
                   }
                 },
                 "Property": "Run At"
@@ -158,7 +158,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'DQ Score % by run'"
+                  "Value": "'DQ Score % by run (strict: warn earns 0)'"
                 }
               }
             },

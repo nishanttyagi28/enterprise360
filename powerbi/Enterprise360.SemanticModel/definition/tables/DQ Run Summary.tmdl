@@ -1,0 +1,119 @@
+/// core.dq_run_summary: one row per dbt run with strict weighted dq_score (warn earns 0) and is_latest_run. Standalone from the Olist star; filters DQ Results by run_id.
+table 'DQ Run Summary'
+	lineageTag: b12b1a93-55e1-58df-8f5e-30867ea77e22
+
+	column 'Run ID'
+		dataType: string
+		lineageTag: 2da93bd4-42cb-5e12-9cf1-229c2d2246b2
+		summarizeBy: none
+		sourceColumn: run_id
+
+		annotation SummarizationSetBy = User
+
+	column 'Run At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: c228afa6-131c-5bc6-9d89-6d30f5cadfc3
+		summarizeBy: none
+		sourceColumn: run_at
+
+		annotation SummarizationSetBy = User
+
+	column 'Total Checks'
+		dataType: int64
+		lineageTag: 8c58af9d-d2e7-5641-b6fe-6a62e59f6235
+		summarizeBy: none
+		sourceColumn: total_checks
+
+		annotation SummarizationSetBy = User
+
+	column 'Passed Checks'
+		dataType: int64
+		lineageTag: bec0cd86-9e9a-5a2f-8eaf-931bb1724e8b
+		summarizeBy: none
+		sourceColumn: passed_checks
+
+		annotation SummarizationSetBy = User
+
+	column 'Warned Checks'
+		dataType: int64
+		lineageTag: fa081c10-5d36-5fcb-90dc-d4529fbbafac
+		summarizeBy: none
+		sourceColumn: warned_checks
+
+		annotation SummarizationSetBy = User
+
+	column 'Failed Checks'
+		dataType: int64
+		lineageTag: 93767e3c-efc8-5aa9-a8af-4e5a16797cb7
+		summarizeBy: none
+		sourceColumn: failed_checks
+
+		annotation SummarizationSetBy = User
+
+	column 'Failed Blocking Checks'
+		dataType: int64
+		lineageTag: ddeef527-ccda-5c3c-b111-35a214d9582b
+		summarizeBy: none
+		sourceColumn: failed_block_checks
+
+		annotation SummarizationSetBy = User
+
+	column total_weight
+		dataType: double
+		isHidden
+		lineageTag: 00fc5626-42d6-5880-ac09-c7c789967ce3
+		summarizeBy: none
+		sourceColumn: total_weight
+
+		annotation SummarizationSetBy = User
+
+	column passed_weight
+		dataType: double
+		isHidden
+		lineageTag: 691adae0-ad18-5bd1-a285-c2f6190b019c
+		summarizeBy: none
+		sourceColumn: passed_weight
+
+		annotation SummarizationSetBy = User
+
+	column warned_weight
+		dataType: double
+		isHidden
+		lineageTag: 99f605b2-46d4-5602-a08d-feee9f823ef5
+		summarizeBy: none
+		sourceColumn: warned_weight
+
+		annotation SummarizationSetBy = User
+
+	column dq_score
+		dataType: double
+		isHidden
+		formatString: 0.0%
+		lineageTag: ad8d3464-852d-5975-8110-75cc6ab71a95
+		summarizeBy: none
+		sourceColumn: dq_score
+
+		annotation SummarizationSetBy = User
+
+	column is_latest_run
+		dataType: boolean
+		isHidden
+		lineageTag: c97b5bfb-afbc-5904-9f32-48de4b8419d7
+		summarizeBy: none
+		sourceColumn: is_latest_run
+
+		annotation SummarizationSetBy = User
+
+	partition 'DQ Run Summary' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = try Source{[Schema = PgSchema, Item = "dq_run_summary"]}[Data] otherwise #table(type table [run_id = any, run_at = any, total_checks = any, passed_checks = any, warned_checks = any, failed_checks = any, failed_block_checks = any, total_weight = any, passed_weight = any, warned_weight = any, dq_score = any, is_latest_run = any], {}),
+					Selected = Table.SelectColumns(Data, {"run_id", "run_at", "total_checks", "passed_checks", "warned_checks", "failed_checks", "failed_block_checks", "total_weight", "passed_weight", "warned_weight", "dq_score", "is_latest_run"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"run_id", type text}, {"run_at", type datetime}, {"total_checks", Int64.Type}, {"passed_checks", Int64.Type}, {"warned_checks", Int64.Type}, {"failed_checks", Int64.Type}, {"failed_block_checks", Int64.Type}, {"total_weight", type number}, {"passed_weight", type number}, {"warned_weight", type number}, {"dq_score", type number}, {"is_latest_run", type logical}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

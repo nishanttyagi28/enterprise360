@@ -1,6 +1,19 @@
-# UCI Online Retail II — implementation plan (PLAN, not built)
-Owner: Data Engineering · Status: PROPOSED · Source: UCI ML Repository "Online Retail II" (id 502, CC BY 4.0 per UCI page — Data Research to confirm in data/README.md).
+# UCI Online Retail II — implementation plan
+Owner: Data Engineering · Status: **BUILT 2026-10-30** (decisions D1–D6 approved; see §0) · Source: UCI ML Repository "Online Retail II" (id 502, CC BY 4.0 per UCI page — Data Research to confirm in data/README.md).
 Domain rule: **independent source**. No conformed joins with Olist (different company, country, currency GBP vs BRL, period). Nothing in `uci` ever joins a `core.*` Olist table.
+
+## 0. As built (2026-10-30, real files)
+- Files and checksums (pass to Data Research for data/README.md):
+  | File | Bytes | SHA-256 |
+  |---|---|---|
+  | online_retail_II_Year_2009-2010.csv | 46,810,498 | `17181af53059386e360acb2714218558ef526f84acacc768ebbdd3a35623d941` |
+  | online_retail_II_Year_2010-2011.csv | 48,039,783 | `9f3414a3d06748ef953051fa6e2e183b1591047bdfda95e99afd5888de28eb16` |
+  UTF-8, no BOM, LF line endings.
+- Dedup: raw 1,067,371 → within-file exact duplicates dropped 12,133 (DQ warn `assert_uci_exact_duplicates_dropped`) → overlap window 2010-12-01 08:26..2010-12-09 20:01: 44,404 lines → 22,202 kept (later file's copy; 22,202 dropped; `assert_uci_overlap_deduped`, every dropped line has an identical line in the later file) → **1,033,036 lines**. (22,523 raw overlap rows − 321 that were also within-file duplicates = 22,202.)
+- Totals (GBP): gross product sales 19,643,861.64 · product cancellations −716,462.57 · discounts −12,879.63 · **Net Sales (proxy) 18,914,519.44** · postage 433,410.51 · fees −264,936.18 · other non-product −227,460.07 · invoiced value (all lines) 18,855,533.70.
+- Objects: schemas `uci_staging` (stg_uci__invoice_lines_all, stg_uci__invoice_lines), `uci_intermediate` (int_uci__invoice_lines_classified, int_uci__product_descriptions, int_uci__month_coverage, int_uci__dedup_stats), `uci_core` (uci_fct_invoice_lines, uci_fct_invoices, uci_dim_product, uci_dim_customer, uci_dim_country, uci_dim_date, seed uci_stockcode_class), `uci_marts` (uci_mart_sales_daily, uci_mart_product_monthly, uci_mart_country_monthly, uci_mart_customer_cohorts, uci_mart_customer_rfm).
+- Changes vs plan below: separate `uci_dim_date` (shared macros `calendar_spine`/`calendar_columns`, not a shared table); line types renamed to match KPI & Quality tests (`stock_writeoff` = non-C, qty<0, price 0; other price-0 lines = `zero_price`); overlap rule = rows of an earlier file at/after the first timestamp of a later file (not a hard-coded date); line timestamps column `invoice_ts`.
+- Net Sales (proxy) = product lines (sales + cancellations, signed) + discount lines. Gross product sales = product lines on non-C invoices (all have qty>0, price>0).
 
 ## 1. Profiling (real files, 2026-10-30, duckdb over the CSVs)
 | Check | Result |

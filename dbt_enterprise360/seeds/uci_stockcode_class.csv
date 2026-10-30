@@ -1,0 +1,14 @@
+stock_code_pattern,line_type,priority,note
+POST,postage,10,postage
+DOT,postage,10,dotcom postage
+C2,postage,10,carriage
+M,manual,10,manual line (free-text adjustments by staff)
+D,discount,10,discount
+S,sample,10,samples
+BANK CHARGES,fee,10,bank charges
+AMAZONFEE,fee,10,marketplace fee
+CRUK,fee,10,charity commission
+ADJUST%,adjustment,20,manual adjustment
+B,bad_debt,10,adjust bad debt
+TEST%,test,20,test product
+GIFT\_%,voucher,20,gift vouchers (match on upper(StockCode))

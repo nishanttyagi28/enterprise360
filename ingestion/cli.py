@@ -1,4 +1,4 @@
-"""CLI: ``python -m ingestion init-db | olist [--source-dir DIR] [--only NAME] [--force]``."""
+"""CLI: ``python -m ingestion init-db | olist [...] | uci [--source-dir DIR] [--force]``."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import typer
 
 from ingestion.config import get_settings
 from ingestion.log_config import configure_logging
-from ingestion.pipeline import apply_ddl, connect, run_olist
+from ingestion.pipeline import apply_ddl, connect, run_olist, run_uci
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
@@ -35,6 +35,15 @@ def olist(
 ) -> None:
     """Load the Olist CSVs into raw.*; unchanged files are skipped."""
     run_olist(get_settings(), source_dir=source_dir, only=only, force=force)
+
+
+@app.command("uci")
+def uci(
+    source_dir: Annotated[Path | None, typer.Option(help="Folder with the UCI CSVs")] = None,
+    force: Annotated[bool, typer.Option(help="Reload even if file hash unchanged")] = False,
+) -> None:
+    """Load the two UCI Online Retail II CSVs into raw.uci_online_retail_ii_lines."""
+    run_uci(get_settings(), source_dir=source_dir, force=force)
 
 
 if __name__ == "__main__":

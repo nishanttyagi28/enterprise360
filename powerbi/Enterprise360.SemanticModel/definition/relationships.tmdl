@@ -33,3 +33,7 @@ relationship b60899a1-1a5c-5204-933b-94c21ab30dc4
 relationship bb72f534-349e-52ac-aa7b-f16144672736
 	fromColumn: Customer.customer_state
 	toColumn: Geography.State
+
+relationship 0fc78719-da60-5493-8c3a-948399ac04db
+	fromColumn: 'DQ Results'.'Run ID'
+	toColumn: 'DQ Run Summary'.'Run ID'

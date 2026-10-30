@@ -86,6 +86,23 @@ checks, total/passed/warned weight and `dq_score`, so warns are visible as their
 select dq_score, warned_checks, failed_checks from core.dq_run_summary where is_latest_run;
 ```
 
+## UCI Online Retail II (independent domain)
+UK online retailer, GBP, 2009-12 → 2011-12. **Never joined to Olist**: own raw table, own schemas
+(`uci_staging`, `uci_intermediate`, `uci_core`, `uci_marts`), own dims (product, customer, country) and
+its own `uci_dim_date` built from the same calendar macros as `dim_date`. Plan, decisions, profiling
+and checksums: `docs/blueprint/uci-online-retail-plan.md`.
+- Load: `python -m ingestion uci` (both yearly CSVs → `raw.uci_online_retail_ii_lines`; each file
+  replaced independently; `_source_line_no` = row position, the only line key).
+- Dedup (staging): exact duplicates within a file dropped (DQ warn); where a later file restates a
+  window (2010-12-01..09), only the later file's lines are kept. Both logged with before/after counts in
+  `core.dq_results`.
+- Facts: `uci_fct_invoice_lines` (line grain, signed; cancellations are negative lines) and
+  `uci_fct_invoices` (invoice grain). `line_type` from seed `uci_stockcode_class` + rules (postage,
+  fee, discount, manual, voucher, stock_writeoff, zero_price, bad_debt, …).
+- Measures: `gross_product_sales` (product lines, non-C), `product_cancellations`, `discounts`,
+  **`net_sales_proxy_gbp` = Net Sales (proxy)** = product + cancellations + discounts; postage and fees
+  reported separately; `invoiced_value_gbp` = all lines.
+
 ## Ingestion design
 - Contracts (`ingestion/sources/olist.py`): exact headers in order (typos preserved), natural keys.
 - Header validation (BOM-safe, explicit UTF-8) → **COPY** streamed in binary chunks (no newline/codepage
@@ -109,7 +126,7 @@ Copy-Item .env.example .env        # then edit .env: POSTGRES_PASSWORD=<e360_app
   `& 'C:\Program Files\PostgreSQL\16\bin\psql.exe' -U postgres -c "CREATE DATABASE enterprise360_test OWNER e360_app;"`
 - If scripts are blocked: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 - Equivalent `python -m` entry points (any OS): `python -m ingestion init-db`, `python -m ingestion olist
-  [--source-dir DIR] [--force]`, `python -m orchestration.dbt_runner <dbt args>` (loads `.env`, uses the
+  [--source-dir DIR] [--force]`, `python -m ingestion uci [--source-dir DIR] [--force]`, `python -m orchestration.dbt_runner <dbt args>` (loads `.env`, uses the
   in-repo `dbt_enterprise360/profiles.yml`), `python -m orchestration.flow`.
 
 ## Setup & run — Linux/macOS
@@ -121,10 +138,10 @@ Copy-Item .env.example .env        # then edit .env: POSTGRES_PASSWORD=<e360_app
   integration (live DB: COPY load, idempotent re-run, forced reload replaces, changed-file reload,
   SQL/Python row-hash parity, audit). Integration tests load fixtures into `E360_TEST_DB`
   (default `enterprise360_test`) and refuse the main DB.
-- `dbt build`: ~170 tests (unique/not_null/relationships/accepted_values, dbt_utils, grain, fan-out,
+- `dbt build`: ~230 tests (Olist + UCI, incl. KPI & Quality's `tests/uci`, enabled by var `uci_models_built: true`) (unique/not_null/relationships/accepted_values, dbt_utils, grain, fan-out,
   reconciliation, coverage consistency) interleaved with models.
 - Fixtures: `tests/fixtures/olist` (synthetic, FK-consistent, covers the known quirks; CI runs on these).
 
 ## Configuration
 All credentials come from `.env` (gitignored): `POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER,
-POSTGRES_PASSWORD`, plus `E360_TEST_DB`, `E360_OLIST_DIR`, `E360_LOG_LEVEL`, `E360_DBT_THREADS`.
+POSTGRES_PASSWORD`, plus `E360_TEST_DB`, `E360_OLIST_DIR`, `E360_UCI_DIR`, `E360_LOG_LEVEL`, `E360_DBT_THREADS`.

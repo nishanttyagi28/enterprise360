@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     pg_user: str = Field(default="e360_app", validation_alias="POSTGRES_USER")
     pg_password: SecretStr = Field(default=SecretStr(""), validation_alias="POSTGRES_PASSWORD")
     olist_dir: Path = Field(default=Path("data/raw/olist"), validation_alias=AliasChoices("E360_OLIST_DIR"))
+    uci_dir: Path = Field(default=Path("data/raw/uci_online_retail_ii"), validation_alias="E360_UCI_DIR")
     ddl_dir: Path = Field(default=Path("database/ddl"), validation_alias="E360_DDL_DIR")
     log_level: str = Field(default="INFO", validation_alias="E360_LOG_LEVEL")
     # COPY streams the file in chunks; 1 MiB keeps memory flat even for the 60 MB geolocation file.

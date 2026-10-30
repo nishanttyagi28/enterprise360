@@ -20,13 +20,13 @@
                 "Column": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "DQ Results"
+                      "Entity": "DQ Run Summary"
                     }
                   },
                   "Property": "Run At"
                 }
               },
-              "queryRef": "DQ Results.Run At",
+              "queryRef": "DQ Run Summary.Run At",
               "nativeQueryRef": "Run At"
             }
           ]

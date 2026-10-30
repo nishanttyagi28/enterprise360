@@ -24,6 +24,7 @@ ref table Product
 ref table 'Order Status'
 ref table Date
 ref table 'DQ Results'
+ref table 'DQ Run Summary'
 ref table _Measures
 ref table 'Time Intelligence'
 

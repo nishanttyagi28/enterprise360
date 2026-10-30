@@ -1,4 +1,4 @@
-# Data lineage — Olist slice
+# Data lineage — Olist slice and UCI Online Retail II
 Generated from the dbt DAG in `dbt_enterprise360/` (regenerate the interactive version with
 `python -m orchestration.dbt_runner docs generate` then `... docs serve`). Power BI reads `core` and `marts`.
 
@@ -50,3 +50,26 @@ Notes
 - Payments and order lines meet only at order grain (`int_*_aggregated` → `fct_orders`); never line × payment.
 - Raw geolocation reaches the model only through the per-zip-prefix centroid.
 - `dq.dq_results_log` is created by the on-run-start hook and appended by on-run-end (every dbt run, incl. warns).
+
+## UCI Online Retail II (independent; no edges to Olist except shared DQ objects)
+```mermaid
+flowchart LR
+  U1[online_retail_II_Year_2009-2010.csv]:::f --> UR[raw.uci_online_retail_ii_lines]
+  U2[online_retail_II_Year_2010-2011.csv]:::f --> UR
+  UR --> SA[stg_uci__invoice_lines_all<br/>dedup flags] --> SL[stg_uci__invoice_lines]
+  SA --> DS[int_uci__dedup_stats]
+  SL --> IC[int_uci__invoice_lines_classified]
+  SEEDU[seed uci_stockcode_class] --> IC
+  SL --> PD[int_uci__product_descriptions]
+  IC --> FL[uci_fct_invoice_lines] --> FI[uci_fct_invoices]
+  FL --> DP[uci_dim_product]; PD --> DP
+  FI --> DC[uci_dim_customer]; SL --> DK[uci_dim_country]
+  FI --> MC[int_uci__month_coverage] --> DD[uci_dim_date]
+  FI --> MS[uci_mart_sales_daily]; DD --> MS
+  FL --> MP[uci_mart_product_monthly]; DP --> MP
+  FI --> MK[uci_mart_country_monthly]
+  FI --> MH[uci_mart_customer_cohorts]; DC --> MH
+  FI --> MR[uci_mart_customer_rfm]
+  DS --> REC[core.dq_reconciliation]; FL --> REC; MS --> REC; MP --> REC
+  classDef f fill:#1b2a41,color:#cfe8ff
+```

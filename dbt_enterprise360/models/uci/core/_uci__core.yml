@@ -1,0 +1,41 @@
+version: 2
+models:
+  - name: uci_fct_invoice_lines
+    description: Invoice-line grain, GBP, signed (cancellations negative). Gross and Net Sales (proxy) are operational measures, not accounting values.
+    columns:
+      - name: uci_invoice_line_sk
+        tests: [unique, not_null]
+      - name: uci_product_sk
+        tests: [{relationships: {to: "ref('uci_dim_product')", field: uci_product_sk}}]
+      - name: uci_customer_sk
+        tests: [not_null, {relationships: {to: "ref('uci_dim_customer')", field: uci_customer_sk}}]
+      - name: uci_country_sk
+        tests: [{relationships: {to: "ref('uci_dim_country')", field: uci_country_sk}}]
+      - name: invoice_date_key
+        tests: [not_null, {relationships: {to: "ref('uci_dim_date')", field: date_key}}]
+      - name: line_type
+        tests:
+          - accepted_values:
+              values: [product, postage, manual, discount, sample, fee, adjustment, bad_debt, test, voucher, stock_writeoff, zero_price]
+  - name: uci_fct_invoices
+    columns:
+      - name: invoice
+        tests: [unique, not_null]
+      - name: uci_customer_sk
+        tests: [{relationships: {to: "ref('uci_dim_customer')", field: uci_customer_sk}}]
+  - name: uci_dim_product
+    columns:
+      - name: uci_product_sk
+        tests: [unique, not_null]
+  - name: uci_dim_customer
+    columns:
+      - name: uci_customer_sk
+        tests: [unique, not_null]
+  - name: uci_dim_country
+    columns:
+      - name: uci_country_sk
+        tests: [unique, not_null]
+  - name: uci_dim_date
+    columns:
+      - name: date_key
+        tests: [unique, not_null]

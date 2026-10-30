@@ -44,3 +44,31 @@ def test_payment_vs_items_rule(gov):
 
 def test_not_supported_has_reasons(gov):
     assert all(x["reason"] and x["handling"] for x in gov["not_supported"]["not_supported"])
+
+
+def test_catalog_up_to_date(repo_root):
+    import subprocess, sys
+    r = subprocess.run([sys.executable, str(repo_root / "governance/kpi_dictionary/generate_catalog.py"), "--check"])
+    assert r.returncode == 0, "docs/kpi-catalog.md stale: run governance/kpi_dictionary/generate_catalog.py"
+
+
+def test_domains_separate(gov):
+    for k in gov["kpis"]["kpis"]:
+        assert k["domain"] in {"olist", "uci"}
+        assert k["id"].startswith("KPI_UCI_") == (k["domain"] == "uci"), k["id"]
+        deps = " ".join(k["fact_dependencies"] + k["dimension_dependencies"])
+        if k["domain"] == "uci":
+            assert "fct_order" not in deps and "fct_payments" not in deps, k["id"]
+        else:
+            assert "uci_" not in deps, k["id"]
+
+
+def test_supporting_measure_kinds(gov):
+    for k in gov["kpis"]["kpis"]:
+        for m in k.get("supporting_measures", []):
+            assert m["kind"] in {"breakdown", "dq_exclusion", "formatting"} and m["measure"] and m["purpose"]
+
+
+def test_dq_score_strict(gov):
+    k = next(k for k in gov["kpis"]["kpis"] if k["id"] == "KPI_DQ_SCORE")
+    assert k["version"] == "1.2.0" and "core.dq_run_summary" in k["implementations"]["dbt"]

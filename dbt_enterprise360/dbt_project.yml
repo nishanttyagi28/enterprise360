@@ -24,6 +24,12 @@ vars:
   date_spine_end: "2019-12-31"
   # month counts as low-volume below this share of the median complete-month order count
   olist_low_volume_ratio: 0.1
+  # UCI calendar bounds (separate uci_dim_date; same macro as dim_date)
+  uci_date_spine_start: "2009-01-01"
+  uci_date_spine_end: "2012-12-31"
+  uci_low_volume_ratio: 0.1
+  # UCI models exist -> enable KPI & Quality's gated tests in tests/uci
+  uci_models_built: true
   # Brazil bounding box used to discard impossible geolocation points (STTM §2.9)
   brazil_lat_min: -34.0
   brazil_lat_max: 6.0
@@ -45,6 +51,20 @@ models:
     facts:
       +schema: core
       +materialized: table
+    uci:
+      # UCI Online Retail II: independent domain in its own schemas; never joins Olist objects.
+      staging:
+        +schema: uci_staging
+        +materialized: view
+      intermediate:
+        +schema: uci_intermediate
+        +materialized: view
+      core:
+        +schema: uci_core
+        +materialized: table
+      marts:
+        +schema: uci_marts
+        +materialized: table
     dq:
       +schema: core          # Power BI reads core; dq_results is the stable BI-facing relation
     marts:
@@ -54,6 +74,9 @@ models:
 seeds:
   enterprise360:
     +schema: core
+    uci_stockcode_class:
+      +schema: uci_core
+      +column_types: {stock_code_pattern: text, line_type: text, priority: integer}
     dq_check_config:
       +column_types: {check_pattern: text, kpi_id: text, weight: numeric, layer_override: text}
 

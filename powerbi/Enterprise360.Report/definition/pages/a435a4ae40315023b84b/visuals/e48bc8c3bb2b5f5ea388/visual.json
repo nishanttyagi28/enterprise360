@@ -2,12 +2,12 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json",
   "name": "e48bc8c3bb2b5f5ea388",
   "position": {
-    "x": 836,
+    "x": 1052,
     "y": 524,
-    "z": 1100,
+    "z": 1200,
     "height": 184,
-    "width": 420,
-    "tabOrder": 1100
+    "width": 204,
+    "tabOrder": 1200
   },
   "visual": {
     "visualType": "multiRowCard",
@@ -15,20 +15,6 @@
       "queryState": {
         "Values": {
           "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "_Measures"
-                    }
-                  },
-                  "Property": "Payment Mismatch Orders"
-                }
-              },
-              "queryRef": "_Measures.Payment Mismatch Orders",
-              "nativeQueryRef": "Payment Mismatch Orders"
-            },
             {
               "field": {
                 "Measure": {

@@ -1,0 +1,11 @@
+check_pattern,kpi_id,weight,layer_override,note
+assert_uci_grain_fct_invoice_lines,KPI_UCI_GROSS_SALES,,uci_core,PROPOSED - not loaded
+assert_uci_grain_fct_invoices,KPI_UCI_INVOICES,,uci_core,PROPOSED - not loaded
+assert_uci_grain_mart_customer_rfm,KPI_UCI_RFM_SEGMENT,,uci_marts,PROPOSED - not loaded
+assert_uci_recon_lines_vs_staging,KPI_UCI_GROSS_SALES,,uci_core,PROPOSED - not loaded
+assert_uci_recon_invoices_rollup,KPI_UCI_INVOICES,,uci_core,PROPOSED - not loaded
+assert_uci_recon_mart_sales_daily_vs_fact,KPI_UCI_GROSS_SALES,,uci_marts,PROPOSED - not loaded
+assert_uci_recon_mart_product_vs_fact,KPI_UCI_PRODUCT_CONTRIBUTION,,uci_marts,PROPOSED - not loaded
+assert_uci_no_fanout_lines_dims,KPI_UCI_GROSS_SALES,,uci_core,PROPOSED - not loaded
+assert_uci_cancellation_linkage,KPI_UCI_CANCEL_RATE_LINES,,uci_core,PROPOSED - not loaded
+assert_uci_dq_missing_customer_share,KPI_UCI_ACTIVE_CUSTOMERS,,uci_core,PROPOSED - warn

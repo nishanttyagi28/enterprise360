@@ -22,6 +22,7 @@ from ingestion.loaders.postgres import PostgresLoader
 from ingestion.log_config import get_logger
 from ingestion.sources.contracts import SourceContract
 from ingestion.sources.olist import OLIST_CONTRACTS
+from ingestion.sources.uci import UCI_CONTRACTS
 from ingestion.validators.contract import validate_header
 
 log = get_logger(__name__)
@@ -61,13 +62,39 @@ def load_source(
     force: bool = False,
     chunk_bytes: int = 1 << 20,
 ) -> LoadResult:
+    """Load a single-file contract (Olist). Multi-file contracts use :func:`load_contract_files`."""
+    return load_file(conn, contract, source_dir / contract.file_name, force=force, chunk_bytes=chunk_bytes)
+
+
+def load_contract_files(
+    conn: psycopg.Connection,
+    contract: SourceContract,
+    source_dir: Path,
+    *,
+    force: bool = False,
+    chunk_bytes: int = 1 << 20,
+) -> list[LoadResult]:
+    return [
+        load_file(conn, contract, source_dir / name, force=force, chunk_bytes=chunk_bytes)
+        for name in contract.file_names
+    ]
+
+
+def load_file(
+    conn: psycopg.Connection,
+    contract: SourceContract,
+    path: Path,
+    *,
+    force: bool = False,
+    chunk_bytes: int = 1 << 20,
+) -> LoadResult:
     audit = LoadAuditRepository(conn)
-    source = describe_file(source_dir / contract.file_name)
+    source = describe_file(path)
     validate_header(contract, source.header)
     batch_id = uuid.uuid4()
     bound = log.bind(source=contract.name, batch_id=str(batch_id), sha256=source.sha256[:12])
 
-    if not force and audit.last_success_hash(contract.name) == source.sha256:
+    if not force and audit.last_success_hash(contract.name, source.path.name) == source.sha256:
         audit.start(
             batch_id,
             contract.name,
@@ -112,10 +139,29 @@ def run_olist(
             load_source(conn, c, directory, force=force, chunk_bytes=settings.copy_chunk_bytes)
             for c in contracts
         ]
+    _log_summary("olist_ingest_finished", results)
+    return results
+
+
+def run_uci(settings: Settings, *, source_dir: Path | None = None, force: bool = False) -> list[LoadResult]:
+    directory = settings.resolve(source_dir or settings.uci_dir)
+    log.info("uci_ingest_started", source_dir=str(directory), force=force)
+    with connect(settings) as conn:
+        results = [
+            r
+            for c in UCI_CONTRACTS
+            for r in load_contract_files(
+                conn, c, directory, force=force, chunk_bytes=settings.copy_chunk_bytes
+            )
+        ]
+    _log_summary("uci_ingest_finished", results)
+    return results
+
+
+def _log_summary(event: str, results: Sequence[LoadResult]) -> None:
     log.info(
-        "olist_ingest_finished",
+        event,
         loaded=sum(r.status is LoadStatus.SUCCESS for r in results),
         skipped=sum(r.status is LoadStatus.SKIPPED for r in results),
         rows=sum(r.rows_loaded for r in results),
     )
-    return results

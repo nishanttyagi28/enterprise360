@@ -49,6 +49,7 @@ Import mode with a star/constellation schema. Every relationship is many-to-one 
 | Seller / Product | `dim_seller` / `dim_product` | seller_id / product_id | English category with PT fallback (dbt) |
 | Order Status | distinct `fct_orders.order_status` | status | adds a display group |
 | Date | `dim_date` | day | **marked as date table**. Month sorts by Month No, Year Month sorts by Month Start |
+| DQ Run Summary | `dq_run_summary` (dbt view in core; empty fallback if absent) | dbt run | strict `dq_score` (warn earns 0), counts, `is_latest_run`. Filters DQ Results by Run ID. Standalone from the Olist star. Generator switch `USE_DQ_RUN_SUMMARY` |
 | DQ Results | `dq_results` (dbt `models/dq`, schema core; empty fallback if absent) | run_id × check_id | **standalone**: no relationships, so Date, Geography and other slicers do not affect it |
 | _Measures | — | — | all explicit measures, in display folders |
 | Time Intelligence | calculation group | — | Current, MTD, QTD, YTD, PY, YoY, YoY %, Rolling 12M. YoY % has its own format string. Any visual that uses YoY on GMV must carry the partial caveat |
@@ -65,7 +66,8 @@ Import mode with a star/constellation schema. Every relationship is many-to-one 
 - `[On-Time Delivery %]` refers only to Delivery columns (`is_otd_eligible`, `is_on_time`) and has no Date reference, so the purchase date is not reintroduced. Its Product/Seller branch turns on Order Item ↔ Order BOTH, which only widens filtering from the item side and doesn't touch Date.
 - The earlier inactive Date → Delivery relationship was **removed**, because nothing used it any more. The model has no ambiguous paths: 9 active one-way relationships form a tree. `tools/validate_pbip.py` now fails on any measure, calc item or calculated column that uses `CROSSFILTER(..., NONE)` or `ALL`/`ALLEXCEPT`/`ALLSELECTED`/`REMOVEFILTERS` on Geography, Customer or Order. I confirmed with a test model that the check catches both patterns.
 
-**DQ "latest run" logic.** Every DQ measure filters to the latest `run_at`, unless `Run ID` or `Run At` is already in the filter context (slicer, axis, or table row). In that case it uses the run in context. This means the DQ Score trend by Run At shows one score per run.
+**DQ Score %** comes from `core.dq_run_summary.dq_score`. It uses the run flagged `is_latest_run = TRUE`, unless a run is selected (run slicer or the Run At axis on `DQ Run Summary`); if several runs are selected, it uses the latest of them. Checked on 2026-10-30 against the local warehouse: the latest run (23:08 IST) gives a view `dq_score` of 0.9980, and the old weighted calculation over `dq_results` gives 0.99802. Both show 99.8%. The view rounds to 4 decimal places. The run slicer and score trend use `DQ Run Summary`, and its Run ID filters the check-level `DQ Results` table.
+**Check-level DQ "latest run" logic.** Every DQ measure filters to the latest `run_at`, unless `Run ID` or `Run At` is already in the filter context (slicer, axis, or table row). In that case it uses the run in context. This means the DQ Score trend by Run At shows one score per run.
 
 **GMV Growth % and complete months.** The Date table loads `dim_date.is_complete_month` as a hidden column (TRUE = the whole calendar month lies inside Olist coverage; complete means not partial). `[GMV Growth %]` returns BLANK when prior-month GMV is blank or 0, **or** when the current or prior month has any day with `is_complete_month = FALSE`. It is meant to be read at Year Month level. To drop the check, set `DATE_COMPLETE_FLAG_COLUMN = None` in the generator.
 
@@ -105,7 +107,11 @@ Import mode with a star/constellation schema. Every relationship is many-to-one 
 | `KPI_DQ_SCORE` | `[Checks Warned]` | Data Quality | SUPPORTED | supporting (approved) |
 | `KPI_DQ_SCORE` | `[Blocking Failures]` | Data Quality | SUPPORTED | supporting (approved) |
 | `KPI_DQ_SCORE` | `[Failing Rows]` | Data Quality | SUPPORTED | supporting (approved) |
-| `KPI_PAYMENT_VALUE` | `[Payment Mismatch Orders]` | Data Quality | SUPPORTED | supporting (approved) |
+| `KPI_PAYMENT_VALUE` | `[Payment Mismatch Orders]` | Data Quality | SUPPORTED | supporting (approved) | Baseline 1,076 orders (verified against core).
+| `KPI_PAYMENT_VALUE` | `[Payment Without Items Orders]` | Data Quality | SUPPORTED | supporting — data-quality exclusion count (approved) |
+| `KPI_PAYMENT_VALUE` | `[Overpaid Orders]` | Data Quality | SUPPORTED | supporting — data-quality exclusion count (approved) |
+| `KPI_PAYMENT_VALUE` | `[Underpaid Orders]` | Data Quality | SUPPORTED | supporting — data-quality exclusion count (approved) |
+| `KPI_PAYMENT_VALUE` | `[Items Without Payment Orders]` | Data Quality | SUPPORTED | supporting — data-quality exclusion count (approved) |
 | `KPI_OTD_RATE` | `[Delivered Missing Timestamp]` | Data Quality | SUPPORTED | supporting (approved) — DQ exclusion count, not an operational KPI |
 | `KPI_DELIVERY_DAYS` | `[Delivered Before Purchase]` | Data Quality | SUPPORTED | supporting (approved) — DQ exclusion count, not an operational KPI |
 | `KPI_OTD_RATE` | `[OTD Eligible Orders]` | Data Quality | SUPPORTED | supporting (approved) |
@@ -139,7 +145,7 @@ Locked KPI & Quality definitions, as implemented:
 **Bookmarks** (`definition/bookmarks/`) target only the 5 swappable visuals (`applyOnlyToTargetVisuals`). They use `suppressData` so slicer selections survive. The Detail-view table starts hidden. I kept these simple: the only change they make is visibility of individual visuals (no visual groups, no captured filter state). If Desktop rewrites them on save, commit the result.
 
 ## RLS — "State Manager (demo)" — DEMO ONLY
-`roles/State Manager (demo).tmdl` applies the static filter `Geography[State] = "SP"` and `DQ Results = FALSE()`, which hides DQ from this role.
+`roles/State Manager (demo).tmdl` applies the static filter `Geography[State] = "SP"` and `DQ Results = FALSE()` and `DQ Run Summary = FALSE()`, which hide DQ from this role.
 - **What the filter reaches:** Geography → Customer → Order → Order Item, Payment and Delivery. That covers every Olist fact. All relationships run 1→many in the filtering direction, so no bidirectional filtering is needed.
 - **What it does not reach:** Product, Seller, Date and Order Status dimension rows still list every member, though measures are filtered. `DQ Results` is blocked for this role. Every Olist fact is filtered, including `[On-Time Delivery % (by Delivery Date)]` (now TREATAS-based, see the semantic model notes). The validator guards against measures that would cut the path.
 - **Testing:** RLS is enforced only in the Power BI Service, for users with the Viewer role on the workspace (Admin, Member and Contributor bypass it). In Desktop, test it with **Modeling → View as → State Manager (demo)**.
@@ -148,6 +154,15 @@ Locked KPI & Quality definitions, as implemented:
 ## NOT SUPPORTED (no measures or visuals built; Olist lacks the data)
 Net/recognized revenue, Gross Profit / Gross Margin, Operating Profit / Margin, P&L, Cost per Order (no COGS, opex or GL) · Target Achievement, Budget vs Actual (no real targets; none fabricated) · CAC, ROAS, CTR, Marketing ROI (no spend) · Return Rate / Refunds (no returns table) · Inventory Turnover, Stockout, Fill Rate (no inventory) · Supplier/procurement KPIs (sellers are merchants, not suppliers) · HR KPIs · Cash flow / AR / AP (payments are transaction values) · Complaint resolution time · margin-based CLV · (contractual seller SLAs: Olist has only its own shipping deadline, covered by `[Seller Handover On-Time %]`).
 Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined to orders.
+
+## Payment vs items+freight exceptions (verified)
+`[Payment Mismatch Orders]` = `CALCULATE(COUNTROWS('Order'), KEEPFILTERS(ABS('Order'[payment_vs_items_diff]) > 0.01))`.
+- **How the column is built:** dbt computes `fct_orders.payment_vs_items_diff` as `(coalesce(p.payment_value_total, 0) - coalesce(i.items_gross_total, 0))::numeric(14,2)`. A missing side counts as 0, so the result is never NULL.
+- **Grain:** `fct_orders` is built from `stg_olist__orders` (all 99,441 orders) with items and payments left-joined. Orders with payments but no items are therefore rows in the Order table.
+- **Verified 2026-10-30** on the local warehouse (core) and on the raw CSVs, using exact decimals: **1,076** orders, made up of 772 payments-without-items, 264 overpaid, 39 underpaid and 1 items-without-payment.
+- **Breakdown measures:** they use the hidden `has_items` and `has_payment` columns and the sign of the diff. All four are shown on the Data Quality page.
+- **Breakdown subtitle:** the exceptions card notes that payment-without-items orders do not appear under product or seller filters, so the four breakdowns will not sum to the mismatch total when filtered.
+- **Note:** these measures follow the Date slicer by purchase date. Orders with no items do not appear under Product or Seller filters.
 
 ## Data Engineering status
 - **`core.dq_results`** now exists in dbt (`models/dq/dq_results.sql`, a view in `core` over `dq.dq_results_log`). Its 14 spec columns match what the model selects, and the extra columns (`test_type`, `dbt_status`, `execution_seconds`, `is_latest_run`) are not loaded. The `try … otherwise` fallback is kept, so a refresh still succeeds on a database where dbt has not run yet. The model has not yet been refreshed against real rows.
@@ -162,9 +177,9 @@ python tools/validate_pbip.py --schemas <clone of github.com/microsoft/json-sche
 ```
 `--model-json` is the TOM JSON export of the TMDL folder, produced by the TmdlSerializer check (a small .NET 8 console app using `Microsoft.AnalysisServices.NetCore.retail.amd64`: `TmdlSerializer.DeserializeDatabaseFromFolder`, then `Model.Validate()`, then `JsonSerializer.SerializeDatabase`).
 Last run:
-- All 118 JSON files are valid against their `$schema`, including 2 bookmarks, bookmarks.json, 2 tooltip pages and 2 drill-through pages.
-- TMDL deserialised with 13 tables, 39 measures, 9 relationships and 1 role, and `Model.Validate()` reported no errors.
-- RLS-safety scan: 47 expressions, 0 violations.
+- All 119 JSON files are valid against their `$schema`, including 2 bookmarks, bookmarks.json, 2 tooltip pages and 2 drill-through pages.
+- TMDL deserialised with 13 tables, 43 measures, 10 relationships and 1 role, and `Model.Validate()` reported no errors.
+- RLS-safety scan: 51 expressions, 0 violations.
 - Cross-references checked: relationships, sortBy columns, measure → column/measure references, role filter columns, every visual field, drill-through filter/binding and source visuals, tooltip assignments → Tooltip pages, and bookmark targets and button links. 0 errors.
 
 Not done here (needs Desktop and the database): DAX evaluation and a refresh. After the first refresh, reconcile `[GMV]`, `[Orders]` and `[Payment Value]` to `marts.mart_sales_daily`.

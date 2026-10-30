@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.6,<1", "mypy>=1.10,<2", "pyyaml>=6,<7"]
+dev = ["pytest>=8,<9", "ruff>=0.6,<1", "mypy>=1.10,<2", "pyyaml>=6,<7", "duckdb>=1.0,<3"]
 
 [tool.setuptools.packages.find]
 include = ["ingestion*", "orchestration*"]
@@ -41,6 +41,8 @@ ignore = ["S101", "S608"]  # asserts in tests; S608 = SQL built only from intern
 "tests/integration/test_olist_raw_contracts.py" = ["E501"]
 "tests/conftest.py" = ["E501"]
 "tests/unit/test_ingestion.py" = ["E741"]
+"tests/integration/test_uci_raw_contracts.py" = ["E501"]
+"tests/unit/test_kpi_dictionary.py" = ["E401", "E501", "I001", "S603"]
 
 [tool.mypy]
 python_version = "3.12"

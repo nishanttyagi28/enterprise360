@@ -410,24 +410,17 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
-	/// KPI_DQ_SCORE (SUPPORTED): Sum of weights of checks with status pass / sum of all weights (warn counts as not pass). Latest run_at unless a run is selected.
+	/// KPI_DQ_SCORE (SUPPORTED): Strict weighted DQ score from core.dq_run_summary.dq_score (only pass earns weight; warn and fail earn 0). Latest run (is_latest_run = TRUE) unless a run is selected; if several runs are selected, the latest of them.
 	measure 'DQ Score %' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
-					MAX ( 'DQ Results'[Run At] ),
-					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+					MAX ( 'DQ Run Summary'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Run Summary'[Run At] ), REMOVEFILTERS ( 'DQ Run Summary' ), 'DQ Run Summary'[is_latest_run] = TRUE () )
 				)
 			RETURN
-				CALCULATE (
-					DIVIDE (
-						CALCULATE ( SUM ( 'DQ Results'[weight] ), KEEPFILTERS ( 'DQ Results'[Status] = "pass" ) ),
-						SUM ( 'DQ Results'[weight] )
-					),
-					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
-					'DQ Results'[Run At] = _runAt
-				)
+				CALCULATE ( MAX ( 'DQ Run Summary'[dq_score] ), REMOVEFILTERS ( 'DQ Run Summary' ), 'DQ Run Summary'[Run At] = _runAt )
 		formatString: 0.0%
 		displayFolder: Data Quality
 		lineageTag: 86b4891f-5ae2-5be4-94d3-be0d8a2956bc
@@ -438,7 +431,7 @@ table _Measures
 
 	/// KPI_RECON_VARIANCE (SUPPORTED): Sum of (mart_value - source_value) over checks with a source_value; slice by KPI ID. Latest run unless a run is selected.
 	measure 'Reconciliation Variance' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -451,6 +444,7 @@ table _Measures
 						FILTER ( 'DQ Results', NOT ISBLANK ( 'DQ Results'[source_value] ) ),
 						'DQ Results'[mart_value] - 'DQ Results'[source_value]
 					),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -464,7 +458,7 @@ table _Measures
 
 	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: checks with status fail in the latest (or selected) run.
 	measure 'Checks Failed' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -474,6 +468,7 @@ table _Measures
 			RETURN
 				CALCULATE (
 					CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = "fail" ) ),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -487,7 +482,7 @@ table _Measures
 
 	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: checks with status warn in the latest (or selected) run.
 	measure 'Checks Warned' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -497,6 +492,7 @@ table _Measures
 			RETURN
 				CALCULATE (
 					CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = "warn" ) ),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -510,7 +506,7 @@ table _Measures
 
 	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: failed checks with severity block in the latest (or selected) run.
 	measure 'Blocking Failures' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -524,6 +520,7 @@ table _Measures
 						KEEPFILTERS ( 'DQ Results'[Status] = "fail" ),
 						KEEPFILTERS ( 'DQ Results'[Severity] = "block" )
 					),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -537,7 +534,7 @@ table _Measures
 
 	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: sum of failing_rows in the latest (or selected) run.
 	measure 'Failing Rows' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -547,6 +544,7 @@ table _Measures
 			RETURN
 				CALCULATE (
 					SUM ( 'DQ Results'[failing_rows] ),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -560,7 +558,7 @@ table _Measures
 
 	/// KPI_DQ_SCORE (SUPPORTED): Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden.
 	measure 'DQ Status Colour' =
-			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] ) || ISFILTERED ( 'DQ Run Summary'[Run ID] ) || ISFILTERED ( 'DQ Run Summary'[Run At] )
 			VAR _runAt =
 				IF (
 					_runSelected,
@@ -576,6 +574,7 @@ table _Measures
 						"fail", "#EF4444",
 						"#64748B"
 					),
+					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
 					'DQ Results'[Run At] = _runAt
 				)
@@ -587,11 +586,51 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
-	/// KPI_PAYMENT_VALUE (SUPPORTED): Supporting DQ measure from fct_orders: orders where |payments - (items+freight)| > 0.01 BRL (validation rule of KPI_PAYMENT_VALUE).
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exception count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders.
 	measure 'Payment Mismatch Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )
 		formatString: #,0
 		displayFolder: Data Quality
 		lineageTag: f508fa37-1f68-5b70-b2a9-220ceb766a6f
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): mismatched orders with payments but no order items.
+	measure 'Payment Without Items Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ), KEEPFILTERS ( 'Order'[has_items] = FALSE () ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: a522143f-ee30-5b32-85e0-c35f0fdb1c08
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): mismatched orders with items but no payment record.
+	measure 'Items Without Payment Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ), KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = FALSE () ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 68a44f75-12c6-579e-96b7-563308a7e27e
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): both sides present, payments exceed items+freight by > 0.01 BRL (e.g. installment interest).
+	measure 'Overpaid Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ), KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = TRUE () ), KEEPFILTERS ( 'Order'[payment_vs_items_diff] > 0 ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: b1cc2cb5-e601-50e2-8506-dab1ae81f9d3
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): both sides present, payments below items+freight by > 0.01 BRL (e.g. vouchers/discounts).
+	measure 'Underpaid Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ), KEEPFILTERS ( 'Order'[has_items] = TRUE () ), KEEPFILTERS ( 'Order'[has_payment] = TRUE () ), KEEPFILTERS ( 'Order'[payment_vs_items_diff] < 0 ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 8b02f63d-784d-5b86-9632-ef5aeda35108
 
 		annotation KPI_Id = KPI_PAYMENT_VALUE
 

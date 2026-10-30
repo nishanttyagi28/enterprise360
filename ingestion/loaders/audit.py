@@ -30,12 +30,13 @@ class LoadAuditRepository:
     def __init__(self, conn: psycopg.Connection) -> None:
         self._conn = conn
 
-    def last_success_hash(self, source: str) -> str | None:
+    def last_success_hash(self, source: str, file_name: str) -> str | None:
+        """Per (source, file): multi-file sources skip each unchanged file independently."""
         row = self._conn.execute(
             """select file_sha256 from raw._load_audit
-               where source_name = %s and status = 'success'
+               where source_name = %s and source_file = %s and status = 'success'
                order by finished_at desc limit 1""",
-            (source,),
+            (source, file_name),
         ).fetchone()
         return None if row is None else str(row[0])
 
