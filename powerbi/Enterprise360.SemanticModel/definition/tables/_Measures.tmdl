@@ -586,7 +586,7 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
-	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exception count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders.
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Data-quality exclusion count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders.
 	measure 'Payment Mismatch Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )
 		formatString: #,0
 		displayFolder: Data Quality

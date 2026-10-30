@@ -478,7 +478,7 @@ MEASURES = [
      "Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden."),
     ("Data Quality", "Payment Mismatch Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
      ["CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )"],
-     "Data-quality exception count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders."),
+     "Data-quality exclusion count (validation rule of KPI_PAYMENT_VALUE), not sales: orders where |sum(payment_value) - sum(item_price + freight_value)| > 0.01 BRL. fct_orders.payment_vs_items_diff = coalesce(payments,0) - coalesce(items+freight,0), so orders missing either side count. Baseline: 1,076 orders."),
     ("Data Quality", "Payment Without Items Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
      [f"CALCULATE ( COUNTROWS ( 'Order' ), {MM}, KEEPFILTERS ( 'Order'[has_items] = FALSE () ) )"],
      "Data-quality exclusion count (KPI_PAYMENT_VALUE exception breakdown): mismatched orders with payments but no order items."),
