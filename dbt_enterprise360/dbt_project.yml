@@ -74,6 +74,9 @@ models:
 seeds:
   enterprise360:
     +schema: core
+    uci_country_iso:
+      +schema: uci_core
+      +column_types: {country: text, iso_alpha2: text, iso_alpha3: text, mapping_note: text}
     uci_stockcode_class:
       +schema: uci_core
       +column_types: {stock_code_pattern: text, line_type: text, priority: integer}

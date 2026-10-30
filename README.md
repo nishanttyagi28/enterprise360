@@ -91,7 +91,7 @@ UK online retailer, GBP, 2009-12 → 2011-12. **Never joined to Olist**: own raw
 (`uci_staging`, `uci_intermediate`, `uci_core`, `uci_marts`), own dims (product, customer, country) and
 its own `uci_dim_date` built from the same calendar macros as `dim_date`. Plan, decisions, profiling
 and checksums: `docs/blueprint/uci-online-retail-plan.md`.
-- Load: `python -m ingestion uci` (both yearly CSVs → `raw.uci_online_retail_ii_lines`; each file
+- Load: `python -m ingestion uci` (or `.\scripts\run.ps1 -Domain uci`; default `-Domain all` loads both, independently) (both yearly CSVs → `raw.uci_online_retail_ii_lines`; each file
   replaced independently; `_source_line_no` = row position, the only line key).
 - Dedup (staging): exact duplicates within a file dropped (DQ warn); where a later file restates a
   window (2010-12-01..09), only the later file's lines are kept. Both logged with before/after counts in
@@ -102,6 +102,8 @@ and checksums: `docs/blueprint/uci-online-retail-plan.md`.
 - Measures: `gross_product_sales` (product lines, non-C), `product_cancellations`, `discounts`,
   **`net_sales_proxy_gbp` = Net Sales (proxy)** = product + cancellations + discounts; postage and fees
   reported separately; `invoiced_value_gbp` = all lines.
+- AOV (`uci_mart_sales_daily.aov_gbp`) = Net Sales (proxy) / sales (non-C) invoices. It is a daily ratio
+  (non-additive): in BI compute monthly AOV as `sum(net_sales_proxy_gbp) / sum(sales_invoice_count)`.
 
 ## Ingestion design
 - Contracts (`ingestion/sources/olist.py`): exact headers in order (typos preserved), natural keys.

@@ -25,6 +25,7 @@ jobs:
       POSTGRES_USER: e360_app
       POSTGRES_PASSWORD: ci-only-password
       E360_OLIST_DIR: tests/fixtures/olist
+      E360_UCI_DIR: tests/fixtures/uci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,6 +46,7 @@ jobs:
         run: |
           python -m ingestion init-db
           python -m ingestion olist
+          python -m ingestion uci
       - name: dbt deps + build (fixtures)
         run: |
           python -m orchestration.dbt_runner deps

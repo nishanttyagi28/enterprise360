@@ -5,6 +5,17 @@ models:
     columns:
       - name: date_key
         tests: [unique, not_null]
+      - name: net_sales_proxy_gbp
+        description: AOV numerator (additive; sum it for any rollup).
+      - name: sales_invoice_count
+        description: Sales (non-cancellation) invoices; AOV denominator (additive). Same value as sales_invoices.
+      - name: aov_gbp
+        description: >-
+          KPI_UCI_AOV = net_sales_proxy_gbp / sales_invoice_count for the day. NON-ADDITIVE: monthly or any
+          other rollup must be recomputed as sum(net_sales_proxy_gbp) / sum(sales_invoice_count); never sum or
+          average daily aov_gbp.
+      - name: gross_product_value_per_product_invoice_gbp
+        description: Previous aov_gbp definition, kept for reference (gross product sales / non-C invoices with at least one product line). Not the AOV KPI.
   - name: uci_mart_product_monthly
     tests:
       - dbt_utils.unique_combination_of_columns: {combination_of_columns: [month_start, uci_product_sk]}

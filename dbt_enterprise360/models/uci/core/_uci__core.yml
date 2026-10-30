@@ -35,6 +35,9 @@ models:
     columns:
       - name: uci_country_sk
         tests: [unique, not_null]
+      - name: is_in_iso_seed
+        description: false = new country name not yet in seed uci_country_iso (add a row).
+        tests: [{accepted_values: {values: [true], config: {severity: warn}}}]
   - name: uci_dim_date
     columns:
       - name: date_key

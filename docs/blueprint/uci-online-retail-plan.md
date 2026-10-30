@@ -13,6 +13,7 @@ Domain rule: **independent source**. No conformed joins with Olist (different co
 - Totals (GBP): gross product sales 19,643,861.64 · product cancellations −716,462.57 · discounts −12,879.63 · **Net Sales (proxy) 18,914,519.44** · postage 433,410.51 · fees −264,936.18 · other non-product −227,460.07 · invoiced value (all lines) 18,855,533.70.
 - Objects: schemas `uci_staging` (stg_uci__invoice_lines_all, stg_uci__invoice_lines), `uci_intermediate` (int_uci__invoice_lines_classified, int_uci__product_descriptions, int_uci__month_coverage, int_uci__dedup_stats), `uci_core` (uci_fct_invoice_lines, uci_fct_invoices, uci_dim_product, uci_dim_customer, uci_dim_country, uci_dim_date, seed uci_stockcode_class), `uci_marts` (uci_mart_sales_daily, uci_mart_product_monthly, uci_mart_country_monthly, uci_mart_customer_cohorts, uci_mart_customer_rfm).
 - Changes vs plan below: separate `uci_dim_date` (shared macros `calendar_spine`/`calendar_columns`, not a shared table); line types renamed to match KPI & Quality tests (`stock_writeoff` = non-C, qty<0, price 0; other price-0 lines = `zero_price`); overlap rule = rows of an earlier file at/after the first timestamp of a later file (not a hard-coded date); line timestamps column `invoice_ts`.
+- Single AOV definition (KPI_UCI_AOV): net_sales_proxy_gbp / sales invoices (45,336 total) = £417.21 overall; recompute from summed components, never average daily aov_gbp.
 - Net Sales (proxy) = product lines (sales + cancellations, signed) + discount lines. Gross product sales = product lines on non-C invoices (all have qty>0, price>0).
 
 ## 1. Profiling (real files, 2026-10-30, duckdb over the CSVs)
@@ -56,7 +57,7 @@ Separate schemas keep Power BI navigation clean and make "no cross-source join" 
 - **Date**: reuse `core.dim_date` (generic Gregorian calendar, no Olist attributes in its key/columns except the Olist coverage flags) — justification: calendar semantics are identical (STTM §7). The Olist `is_complete_month` flags do **not** apply to UCI; UCI gets its own `uci_int_month_coverage` (2009-12 → 2011-12; 2011-12 partial). Open decision D2: if Power BI wants no Olist columns visible from the UCI model, create `uci_dim_date` as a thin view over the spine instead.
 
 ## 5. Marts (`models/marts/uci/`)
-- `uci_mart_sales_daily` (date): invoices, cancellation invoices, gross product sales, cancellations value, net sales proxy, units, active customers (identified only), AOV.
+- `uci_mart_sales_daily` (date): invoices, cancellation invoices, gross product sales, cancellations value, net sales proxy, units, active customers (identified only), `sales_invoice_count`, `aov_gbp` = KPI_UCI_AOV = Net Sales (proxy) / sales (non-C) invoices (daily ratio, non-additive: monthly AOV = sum(net_sales_proxy_gbp) / sum(sales_invoice_count)); `gross_product_value_per_product_invoice_gbp` keeps the old gross-per-product-invoice ratio.
 - `uci_mart_product_monthly` (month × StockCode): units, gross, cancelled, net, cancellation rate.
 - `uci_mart_country_monthly` (month × country).
 - `uci_mart_customer_cohorts` (first-purchase month × months since; identified customers only).

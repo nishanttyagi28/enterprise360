@@ -1,0 +1,44 @@
+country,iso_alpha2,iso_alpha3,mapping_note
+Australia,AU,AUS,
+Austria,AT,AUT,
+Bahrain,BH,BHR,
+Belgium,BE,BEL,
+Bermuda,BM,BMU,
+Brazil,BR,BRA,
+Canada,CA,CAN,
+Channel Islands,,,not one ISO country (Jersey JE / Guernsey GG)
+Cyprus,CY,CYP,
+Czech Republic,CZ,CZE,
+Denmark,DK,DNK,
+EIRE,IE,IRL,source name for Ireland
+European Community,,,region not a country
+Finland,FI,FIN,
+France,FR,FRA,
+Germany,DE,DEU,
+Greece,GR,GRC,
+Hong Kong,HK,HKG,
+Iceland,IS,ISL,
+Israel,IL,ISR,
+Italy,IT,ITA,
+Japan,JP,JPN,
+Korea,KR,KOR,assumed Republic of Korea
+Lebanon,LB,LBN,
+Lithuania,LT,LTU,
+Malta,MT,MLT,
+Netherlands,NL,NLD,
+Nigeria,NG,NGA,
+Norway,NO,NOR,
+Poland,PL,POL,
+Portugal,PT,PRT,
+RSA,ZA,ZAF,source name for South Africa
+Saudi Arabia,SA,SAU,
+Singapore,SG,SGP,
+Spain,ES,ESP,
+Sweden,SE,SWE,
+Switzerland,CH,CHE,
+Thailand,TH,THA,
+USA,US,USA,
+United Arab Emirates,AE,ARE,
+United Kingdom,GB,GBR,
+Unspecified,,,unknown
+West Indies,,,region not a country

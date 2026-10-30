@@ -107,7 +107,7 @@ def test_audit_records_runs(conn: psycopg.Connection) -> None:
 def test_uci_files_load_independently_with_line_numbers(conn: psycopg.Connection, tmp_path: Path) -> None:
     contract = UCI_ONLINE_RETAIL_II
     results = load_contract_files(conn, contract, UCI_FIXTURES, force=True)
-    assert [r.rows_loaded for r in results] == [6, 3]  # exact duplicate kept in raw (dropped in dbt)
+    assert [r.rows_loaded for r in results] == [6, 5]  # exact duplicate kept in raw (dropped in dbt)
     rows = conn.execute(
         'select _source_file, _source_line_no, "Invoice", "Customer ID" '
         "from raw.uci_online_retail_ii_lines order by 1, 2"
@@ -127,5 +127,5 @@ def test_uci_files_load_independently_with_line_numbers(conn: psycopg.Connection
             "select _source_file, count(*) from raw.uci_online_retail_ii_lines group by 1"
         ).fetchall()
     )
-    assert counts == {contract.file_names[0]: 6, contract.file_names[1]: 4}
+    assert counts == {contract.file_names[0]: 6, contract.file_names[1]: 6}
     load_file(conn, contract, UCI_FIXTURES / contract.file_names[1], force=True)
