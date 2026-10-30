@@ -8,7 +8,7 @@ not_supported:
   handling: excluded; shown as 'not available from source'; never synthesized
   domain: olist
 - kpis: CAC, ROAS, CTR, Marketing ROI
-  reason: No marketing spend/impressions in Olist (Marketing Funnel has leads/deals only, separate dataset)
+  reason: No marketing spend/impressions in Olist (Marketing Funnel has leads/deals only, no spend; funnel KPIs are leads/deals/conversion only)
   handling: excluded; shown as 'not available from source'; never synthesized
   domain: olist
 - kpis: Return Rate / Refunds
@@ -51,3 +51,7 @@ not_supported:
   kpis: UCI CAC / ROAS
   reason: No marketing spend data
   handling: excluded; never synthesized
+- kpis: Seller declared monthly revenue as revenue/GMV KPI
+  reason: olist_closed_deals.declared_monthly_revenue is self-declared by sellers at signup (94.7% are 0), not observed sales and not revenue
+  handling: excluded as a KPI; may be shown only as a labelled descriptive attribute
+  domain: olist

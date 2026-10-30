@@ -1,4 +1,9 @@
-dictionary_version: 2.0.0
+dictionary_version: 2.1.0
+dictionary_change_log:
+- version: 2.1.0
+  date: '2026-10-31'
+  author: KPI & Quality
+  change: Added Olist marketing funnel KPIs (area marketing_funnel) and exploratory GMV forecast/anomaly KPIs (area forecasting); optional `area` field (schema 1.2.0). DE models pending; sources marked PROPOSED.
 domains:
   olist: {dataset: 'Olist Brazilian E-Commerce Public Dataset (Kaggle olistbr/brazilian-ecommerce)', currency: BRL}
   uci: {dataset: 'UCI Online Retail II', currency: GBP}
@@ -1781,3 +1786,309 @@ kpis:
     sql: dbt_enterprise360/analyses/uci/kpi_uci_country_contribution.sql (reconciliation reference only)
     power_bi_dax: '[UCI Country Contribution %] (proposed; confirm with Power BI)'
     streamlit: app/services/kpis.py → reads uci_marts; no recomputation
+- id: KPI_FUNNEL_MQLS
+  name: Marketing Qualified Leads (MQLs)
+  status: SUPPORTED
+  area: marketing_funnel
+  definition: 'Count of distinct marketing qualified leads, dated by first_contact_date. Data covers first contacts 2017-06-14..2018-05-31 (8,000 MQLs, mql_id unique).'
+  formula: 'COUNT(DISTINCT fct_leads.mql_id)'
+  numerator: '—'
+  denominator: '—'
+  unit: count
+  source:
+  - olist_marketing_qualified_leads.mql_id
+  - olist_marketing_qualified_leads.first_contact_date
+  - olist_marketing_qualified_leads.origin
+  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  fact_dependencies:
+  - fct_leads (PROPOSED, pending DE)
+  dimension_dependencies:
+  - dim_date
+  - dim_lead_origin (PROPOSED, pending DE)
+  grain: 'lead (mql_id)'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Marketing
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'fct_leads.mql_id unique and not null (assert_funnel_grain_fct_leads, gated by var funnel_models_built)'
+  - 'count(fct_leads) == raw MQL rows (8,000 at 2026-10-31)'
+  - 'June 2017 has only 4 MQLs (data starts 2017-06-14): flag as partial month'
+  supporting_measures:
+  - measure: '[MQLs by Origin]'
+    kind: breakdown
+    purpose: "MQLs split by origin; 60 MQLs (0.75%) have null origin and 1,099 are 'unknown' — show both, do not merge silently"
+  caveats:
+  - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'fct_leads.mql_id (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[MQLs] (proposed; confirm with Power BI)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+- id: KPI_FUNNEL_CLOSED_DEALS
+  name: Closed Deals
+  status: SUPPORTED
+  area: marketing_funnel
+  definition: 'Count of distinct mql_id in the closed-deals dataset (a lead that became an Olist seller), dated by won_date. 842 deals, won_date 2017-12-05..2018-11-14.'
+  formula: 'COUNT(DISTINCT fct_closed_deals.mql_id)'
+  numerator: '—'
+  denominator: '—'
+  unit: count
+  source:
+  - olist_closed_deals.mql_id
+  - olist_closed_deals.won_date
+  - olist_closed_deals.business_segment
+  - olist_closed_deals.lead_type
+  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  fact_dependencies:
+  - fct_closed_deals (PROPOSED, pending DE)
+  dimension_dependencies:
+  - dim_date
+  grain: 'closed deal (mql_id)'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Marketing
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'fct_closed_deals.mql_id unique and not null'
+  - 'every closed-deal mql_id exists in fct_leads (WARN; 0 unmatched at 2026-10-31)'
+  - 'won_date is a timestamp; date by won_date::date'
+  supporting_measures:
+  - measure: '[Closed Deals by Business Segment]'
+    kind: breakdown
+    purpose: '33 segments; 0.12% null'
+  - measure: '[Closed Deals by Lead Type]'
+    kind: breakdown
+    purpose: '0.71% null lead_type'
+  - measure: '[Unmatched Closed Deals]'
+    kind: dq_exclusion
+    purpose: 'deals whose mql_id is not in fct_leads (0 at 2026-10-31)'
+  caveats:
+  - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
+  - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
+  - 'Deals dated by won_date are a different time axis from MQLs by first_contact_date; deals-in-month / MQLs-in-month is NOT a conversion rate.'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'fct_closed_deals.mql_id (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[Closed Deals] (proposed; confirm with Power BI)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+- id: KPI_FUNNEL_CONVERSION_RATE
+  name: Lead-to-Deal Conversion % (first-contact cohort)
+  status: PARTIAL
+  area: marketing_funnel
+  definition: 'Share of MQLs in a first_contact_date month cohort that became a closed deal (at any later date). Cohort-based: numerator and denominator share the same MQL cohort; never deals-in-month / MQLs-in-month.'
+  formula: "COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)"
+  numerator: 'closed deals whose mql_id is in the cohort'
+  denominator: 'MQLs in the cohort'
+  unit: percent
+  source:
+  - olist_marketing_qualified_leads.mql_id
+  - olist_marketing_qualified_leads.first_contact_date
+  - olist_closed_deals.mql_id
+  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  fact_dependencies:
+  - fct_leads (PROPOSED)
+  - fct_closed_deals (PROPOSED)
+  - mart_funnel_monthly (PROPOSED, pending DE)
+  dimension_dependencies:
+  - dim_date
+  - dim_lead_origin (PROPOSED)
+  grain: 'first-contact month cohort'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Marketing
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - '0 <= conversion <= 1'
+  - 'numerator <= denominator per cohort'
+  - 'cohort_is_mature flag present: cohort mature when cohort month end + 162 days <= max(won_date) in data (162 = observed p90 days-to-close)'
+  - 'overall all-cohort value 842/8,000 = 10.53% (2026-10-31)'
+  supporting_measures:
+  - measure: '[Converted Leads in Cohort]'
+    kind: breakdown
+    purpose: "numerator, attributed to the lead's first_contact month, not won month"
+  - measure: '[Cohort Is Mature]'
+    kind: formatting
+    purpose: 'maturity flag; grey out or exclude immature cohorts'
+  caveats:
+  - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
+  - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
+  - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 162 days (observed p90 of first_contact->won days; p75 55, p95 210, max 427). With max won_date 2018-11-14 all cohorts pass p90, but Apr–May 2018 do not pass p95 — report mature cohorts only or show the flag.'
+  - 'Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.'
+  - 'Ratio of sums per cohort; never average monthly rates across cohorts or origins.'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'mart_funnel_monthly.conversion_rate (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[Lead Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]) on first-contact date (proposed)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+- id: KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+  name: Median Days to Close
+  status: SUPPORTED
+  area: marketing_funnel
+  definition: 'Median of (won_date::date − first_contact_date) in days over closed deals that match an MQL and have a non-negative duration.'
+  formula: 'PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY won_date::date - first_contact_date) WHERE matched AND duration >= 0'
+  numerator: '—'
+  denominator: '—'
+  unit: days
+  source:
+  - olist_marketing_qualified_leads.first_contact_date
+  - olist_closed_deals.won_date
+  source_tag: 'PROPOSED — pending DE (Olist Marketing Funnel CSV headers verified 2026-10-31; dbt models fct_leads/fct_closed_deals/dim_lead_origin/mart_funnel_monthly announced by DE, not yet in repo)'
+  fact_dependencies:
+  - fct_closed_deals (PROPOSED)
+  - fct_leads (PROPOSED)
+  dimension_dependencies:
+  - dim_date
+  grain: 'closed deal'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Marketing
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'duration >= 0; negative durations WARN and excluded (1 deal, -2 days, mql_id b91cf8812365f50ff4bda4bcd6206b05)'
+  - 'median computed from row-level data only; never averaged across months/segments'
+  - 'observed value 14 days over 841 valid deals (2026-10-31); 33 deals close same day (0 days)'
+  supporting_measures:
+  - measure: '[Negative Duration Deals]'
+    kind: dq_exclusion
+    purpose: 'count of deals with won_date < first_contact_date (1)'
+  caveats:
+  - 'Median is non-additive: recompute at every filter level from rows, never average monthly or segment medians.'
+  - 'Right-skewed (p90 162, max 427 days); also show p75/p90 if needed.'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'fct_closed_deals.days_to_close (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[Median Days to Close] = MEDIANX over deal rows (proposed)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+- id: KPI_GMV_FORECAST
+  name: GMV Forecast (exploratory)
+  status: PARTIAL
+  area: forecasting
+  definition: "Model-based forecast of KPI_GMV (SUM item_price, freight excluded) at monthly or daily grain per DE's implementation, trained only on complete reporting months. Accuracy: not yet measured (no backtest values stored in any mart)."
+  formula: 'forecast_gmv_t = model(GMV history up to training cutoff); compare vs seasonal-naive / naive-last-value baseline'
+  numerator: '—'
+  denominator: '—'
+  unit: BRL
+  source:
+  - olist_order_items.price
+  - olist_orders.order_purchase_timestamp
+  source_tag: 'PROPOSED — pending DE (GMV forecast/anomaly mart name TBD by DE; no model in repo on 2026-10-31; proposed names mart_gmv_forecast / mart_gmv_anomalies)'
+  fact_dependencies:
+  - fct_order_items
+  - mart_gmv_forecast (PROPOSED, name TBD by DE)
+  dimension_dependencies:
+  - dim_date
+  grain: 'forecast date x horizon (monthly or daily per DE)'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'training window only where is_complete_month AND is_reporting_month'
+  - 'time-based train/validation/test split; no test date inside training window (leakage)'
+  - 'forecast dates contiguous with no gaps per horizon'
+  - "metrics MAE and MAPE/sMAPE reported against baseline; cite only values stored by DE backtest, else 'not yet measured'"
+  - 'prediction intervals labelled model-based, not guarantees'
+  supporting_measures:
+  - measure: '[GMV Forecast Lower/Upper]'
+    kind: formatting
+    purpose: 'model-based prediction interval band'
+  caveats:
+  - "Exploratory, not a KPI of record; labelled 'exploratory' in every report. Forecasts GMV (item price only), NOT revenue."
+  - 'Only ~20 usable complete reporting months (dim_date.is_complete_month AND is_reporting_month); excludes sparse 2016 months and the truncated Sep–Oct 2018 tail.'
+  - "Black Friday 2017-11-24 spike and May 2018 truckers' strike distort fits and will flag."
+  - 'Method, horizon and baseline: to be confirmed from DE implementation (not in repo 2026-10-31).'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'mart_gmv_forecast (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[GMV Forecast] (proposed; exploratory)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist
+- id: KPI_GMV_ANOMALY_FLAG
+  name: GMV Anomaly Flag (exploratory)
+  status: PARTIAL
+  area: forecasting
+  definition: 'Day flagged when daily GMV residual vs expected (rolling/forecast expectation) exceeds k robust z-score (MAD-based); default proposal k=3.5 pending DE implementation.'
+  formula: 'flag = |GMV_d − expected_d| / (1.4826 × MAD(residuals)) > k'
+  numerator: '—'
+  denominator: '—'
+  unit: flag (boolean)
+  source:
+  - olist_order_items.price
+  - olist_orders.order_purchase_timestamp
+  source_tag: 'PROPOSED — pending DE (GMV forecast/anomaly mart name TBD by DE; no model in repo on 2026-10-31; proposed names mart_gmv_forecast / mart_gmv_anomalies)'
+  fact_dependencies:
+  - fct_order_items
+  - mart_gmv_anomalies (PROPOSED, name TBD by DE)
+  dimension_dependencies:
+  - dim_date
+  grain: 'day'
+  refresh: daily batch after ingestion + dbt build (static historical dataset)
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 'one row per date (grain unique)'
+  - 'partial days and truncated tail (outside is_reporting_month) excluded'
+  - 'threshold k stored with each row'
+  supporting_measures:
+  - measure: '[GMV Anomaly Days]'
+    kind: breakdown
+    purpose: 'count of flagged days in context'
+  caveats:
+  - "Exploratory, not a KPI of record; labelled 'exploratory' in every report. Forecasts GMV (item price only), NOT revenue."
+  - 'Only ~20 usable complete reporting months (dim_date.is_complete_month AND is_reporting_month); excludes sparse 2016 months and the truncated Sep–Oct 2018 tail.'
+  - "Black Friday 2017-11-24 spike and May 2018 truckers' strike distort fits and will flag."
+  - "Flags are statistical, not confirmed incidents; known events (Black Friday 2017-11-24, truckers' strike May 2018) are expected flags."
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  implementations:
+    dbt: 'mart_gmv_anomalies (PROPOSED)'
+    sql: (none; dbt authoritative once built)
+    power_bi_dax: '[GMV Anomaly Days] (proposed; exploratory)'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+  domain: olist

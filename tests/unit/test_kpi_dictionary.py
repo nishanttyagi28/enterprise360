@@ -72,3 +72,18 @@ def test_supporting_measure_kinds(gov):
 def test_dq_score_strict(gov):
     k = next(k for k in gov["kpis"]["kpis"] if k["id"] == "KPI_DQ_SCORE")
     assert k["version"] == "1.2.0" and "core.dq_run_summary" in k["implementations"]["dbt"]
+
+
+def test_funnel_and_forecast_kpis(gov):
+    ks = {k["id"]: k for k in gov["kpis"]["kpis"]}
+    areas = set(gov["schema"]["fields"]["area"]["values"])
+    for i in ("KPI_FUNNEL_MQLS", "KPI_FUNNEL_CLOSED_DEALS", "KPI_FUNNEL_CONVERSION_RATE",
+              "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "KPI_GMV_FORECAST", "KPI_GMV_ANOMALY_FLAG"):
+        k = ks[i]
+        assert k["domain"] == "olist" and k["area"] in areas and k["caveats"], i
+    assert ks["KPI_FUNNEL_CONVERSION_RATE"]["status"] == "PARTIAL"
+    assert "cohort" in ks["KPI_FUNNEL_CONVERSION_RATE"]["definition"].lower()
+    for i in ("KPI_GMV_FORECAST", "KPI_GMV_ANOMALY_FLAG"):
+        assert ks[i]["status"] == "PARTIAL" and "exploratory" in ks[i]["name"].lower()
+    assert "not yet measured" in ks["KPI_GMV_FORECAST"]["definition"]
+    assert gov["kpis"]["dictionary_version"] == "2.1.0"

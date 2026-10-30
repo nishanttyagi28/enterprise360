@@ -32,6 +32,12 @@ Olist GMV = SUM(item_price), freight excluded. UCI Gross Sales = invoiced value.
 | KPI_DQ_SCORE | Data Quality Score | SUPPORTED | 1.2.0 | `Σ(weight where status='pass') / Σ(weight)` | run_id | core.dq_run_summary.dq_score | [DQ Score %] | Data Platform Lead |
 | KPI_RECON_VARIANCE | Reconciliation Variance | SUPPORTED | 1.1.0 | `mart_value − source_value` | kpi × run | core.dq_results | [Reconciliation Variance] | Data Platform Lead |
 | KPI_SELLER_HANDOVER_OTD | Seller Handover On-Time Rate | PARTIAL | 1.1.0 | `count(items where delivered_carrier_at <= shipping_limit_at) / count(items with both timestamps)` | order item | fct_order_items.shipping_limit_at joined to fct_deliveries.delivered_carrier_at on order_id (no fan-out, deliveries is one row per order) | [Seller Handover On-Time %] | Head of Operations |
+| KPI_FUNNEL_MQLS | Marketing Qualified Leads (MQLs) | SUPPORTED | 1.0.0 | `COUNT(DISTINCT fct_leads.mql_id)` | lead (mql_id) | fct_leads.mql_id (PROPOSED) | [MQLs] (proposed; confirm with Power BI) | Head of Marketing |
+| KPI_FUNNEL_CLOSED_DEALS | Closed Deals | SUPPORTED | 1.0.0 | `COUNT(DISTINCT fct_closed_deals.mql_id)` | closed deal (mql_id) | fct_closed_deals.mql_id (PROPOSED) | [Closed Deals] (proposed; confirm with Power BI) | Head of Marketing |
+| KPI_FUNNEL_CONVERSION_RATE | Lead-to-Deal Conversion % (first-contact cohort) | PARTIAL | 1.0.0 | `COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)` | first-contact month cohort | mart_funnel_monthly.conversion_rate (PROPOSED) | [Lead Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]) on first-contact date (proposed) | Head of Marketing |
+| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | Median Days to Close | SUPPORTED | 1.0.0 | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY won_date::date - first_contact_date) WHERE matched AND duration >= 0` | closed deal | fct_closed_deals.days_to_close (PROPOSED) | [Median Days to Close] = MEDIANX over deal rows (proposed) | Head of Marketing |
+| KPI_GMV_FORECAST | GMV Forecast (exploratory) | PARTIAL | 1.0.0 | `forecast_gmv_t = model(GMV history up to training cutoff); compare vs seasonal-naive / naive-last-value baseline` | forecast date x horizon (monthly or daily per DE) | mart_gmv_forecast (PROPOSED) | [GMV Forecast] (proposed; exploratory) | Head of Sales |
+| KPI_GMV_ANOMALY_FLAG | GMV Anomaly Flag (exploratory) | PARTIAL | 1.0.0 | `flag = \|GMV_d − expected_d\| / (1.4826 × MAD(residuals)) > k` | day | mart_gmv_anomalies (PROPOSED) | [GMV Anomaly Days] (proposed; exploratory) | Head of Sales |
 
 ### Supporting measures (olist)
 
@@ -60,6 +66,15 @@ Approved helper measures; not KPIs themselves.
 | KPI_DQ_SCORE | [Failing Rows] | breakdown | Rows returned by failing/warning checks |
 | KPI_DQ_SCORE | [DQ Status Colour] | formatting | Conditional-format helper; hidden; not a KPI |
 | KPI_SELLER_HANDOVER_OTD | [Handover Missing Timestamp] | dq_exclusion | Items missing delivered_carrier_at or shipping_limit_at; excluded |
+| KPI_FUNNEL_MQLS | [MQLs by Origin] | breakdown | MQLs split by origin; 60 MQLs (0.75%) have null origin and 1,099 are 'unknown' — show both, do not merge silently |
+| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Business Segment] | breakdown | 33 segments; 0.12% null |
+| KPI_FUNNEL_CLOSED_DEALS | [Closed Deals by Lead Type] | breakdown | 0.71% null lead_type |
+| KPI_FUNNEL_CLOSED_DEALS | [Unmatched Closed Deals] | dq_exclusion | deals whose mql_id is not in fct_leads (0 at 2026-10-31) |
+| KPI_FUNNEL_CONVERSION_RATE | [Converted Leads in Cohort] | breakdown | numerator, attributed to the lead's first_contact month, not won month |
+| KPI_FUNNEL_CONVERSION_RATE | [Cohort Is Mature] | formatting | maturity flag; grey out or exclude immature cohorts |
+| KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | [Negative Duration Deals] | dq_exclusion | count of deals with won_date < first_contact_date (1) |
+| KPI_GMV_FORECAST | [GMV Forecast Lower/Upper] | formatting | model-based prediction interval band |
+| KPI_GMV_ANOMALY_FLAG | [GMV Anomaly Days] | breakdown | count of flagged days in context |
 
 ### Order-level KPIs under Product or Seller filters
 
@@ -92,6 +107,12 @@ Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg
 - **KPI_DQ_SCORE** — Strict severity-weighted DQ score for a dbt run: only status 'pass' earns weight; 'warn' counts as not-pass (earns 0); skipped counts as fail. Weights: block=3, warn=1 (dq_check_config default). Default view = latest run (is_latest_run). Rules: core.dq_run_summary.dq_score == Σ(pass×weight)/Σ(weight) over core.dq_results for the same run_id (verified 2026-10-30 latest run: 505/506 = 0.9980); warn earns 0; skipped → fail; default filter is_latest_run = true; weights block=3, warn=1 unless overridden in dq_check_config
 - **KPI_RECON_VARIANCE** — Difference of key KPIs between staging/source and marts/BI. Rules: counts tolerance 0; amounts 0.01 BRL
 - **KPI_SELLER_HANDOVER_OTD** — Share of order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item's fct_order_items.shipping_limit_at, counting only items with both timestamps. PARTIAL: Olist records the carrier handover once per order, so every seller in a multi-seller order is measured against the same handover time. Rules: exclude items missing either timestamp (count separately as DQ); flag multi-seller orders; seller-level values for them share one order-level handover time; shipping_limit_at is Olist's seller deadline, not a contractual SLA; timestamp comparison, not date-only
+- **KPI_FUNNEL_MQLS** — Count of distinct marketing qualified leads, dated by first_contact_date. Data covers first contacts 2017-06-14..2018-05-31 (8,000 MQLs, mql_id unique). Rules: fct_leads.mql_id unique and not null (assert_funnel_grain_fct_leads, gated by var funnel_models_built); count(fct_leads) == raw MQL rows (8,000 at 2026-10-31); June 2017 has only 4 MQLs (data starts 2017-06-14): flag as partial month
+- **KPI_FUNNEL_CLOSED_DEALS** — Count of distinct mql_id in the closed-deals dataset (a lead that became an Olist seller), dated by won_date. 842 deals, won_date 2017-12-05..2018-11-14. Rules: fct_closed_deals.mql_id unique and not null; every closed-deal mql_id exists in fct_leads (WARN; 0 unmatched at 2026-10-31); won_date is a timestamp; date by won_date::date
+- **KPI_FUNNEL_CONVERSION_RATE** — Share of MQLs in a first_contact_date month cohort that became a closed deal (at any later date). Cohort-based: numerator and denominator share the same MQL cohort; never deals-in-month / MQLs-in-month. Rules: 0 <= conversion <= 1; numerator <= denominator per cohort; cohort_is_mature flag present: cohort mature when cohort month end + 162 days <= max(won_date) in data (162 = observed p90 days-to-close); overall all-cohort value 842/8,000 = 10.53% (2026-10-31)
+- **KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE** — Median of (won_date::date − first_contact_date) in days over closed deals that match an MQL and have a non-negative duration. Rules: duration >= 0; negative durations WARN and excluded (1 deal, -2 days, mql_id b91cf8812365f50ff4bda4bcd6206b05); median computed from row-level data only; never averaged across months/segments; observed value 14 days over 841 valid deals (2026-10-31); 33 deals close same day (0 days)
+- **KPI_GMV_FORECAST** — Model-based forecast of KPI_GMV (SUM item_price, freight excluded) at monthly or daily grain per DE's implementation, trained only on complete reporting months. Accuracy: not yet measured (no backtest values stored in any mart). Rules: training window only where is_complete_month AND is_reporting_month; time-based train/validation/test split; no test date inside training window (leakage); forecast dates contiguous with no gaps per horizon; metrics MAE and MAPE/sMAPE reported against baseline; cite only values stored by DE backtest, else 'not yet measured'; prediction intervals labelled model-based, not guarantees
+- **KPI_GMV_ANOMALY_FLAG** — Day flagged when daily GMV residual vs expected (rolling/forecast expectation) exceeds k robust z-score (MAD-based); default proposal k=3.5 pending DE implementation. Rules: one row per date (grain unique); partial days and truncated tail (outside is_reporting_month) excluded; threshold k stored with each row
 
 ### Not supported (olist)
 
@@ -99,7 +120,7 @@ Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg
 |---|---|---|
 | Net/recognized revenue, Gross Profit, Gross Margin, Operating Profit/Margin, P&L, Cost per Order | No COGS, opex, invoicing, tax or GL in Olist | excluded; shown as 'not available from source'; never synthesized |
 | Target Achievement, Budget vs Actual, Budget Variance | No real targets/budgets; fabrication prohibited | excluded; shown as 'not available from source'; never synthesized |
-| CAC, ROAS, CTR, Marketing ROI | No marketing spend/impressions in Olist (Marketing Funnel has leads/deals only, separate dataset) | excluded; shown as 'not available from source'; never synthesized |
+| CAC, ROAS, CTR, Marketing ROI | No marketing spend/impressions in Olist (Marketing Funnel has leads/deals only, no spend; funnel KPIs are leads/deals/conversion only) | excluded; shown as 'not available from source'; never synthesized |
 | Return Rate / Refunds | No returns or refunds table | excluded; shown as 'not available from source'; never synthesized |
 | Inventory Turnover, Stockout, Fill Rate, Ageing | No inventory or stock data | excluded; shown as 'not available from source'; never synthesized |
 | Supplier/procurement KPIs (PPV, lead time, POs) | Sellers are marketplace merchants, not suppliers; no POs | excluded; shown as 'not available from source'; never synthesized |
@@ -107,6 +128,7 @@ Under a product, category or seller filter, order-level KPIs (Orders, OTD %, Avg
 | Cash flow, AR/AP, Collections | Payments are transaction values, not cash settlement | excluded; shown as 'not available from source'; never synthesized |
 | Complaint Resolution Time | No complaint/ticket data; reviews are not tickets | excluded; shown as 'not available from source'; never synthesized |
 | Margin-based CLV | No cost data; revenue-based CLV would need explicit 'GMV-based' label | excluded; shown as 'not available from source'; never synthesized |
+| Seller declared monthly revenue as revenue/GMV KPI | olist_closed_deals.declared_monthly_revenue is self-declared by sellers at signup (94.7% are 0), not observed sales and not revenue | excluded as a KPI; may be shown only as a labelled descriptive attribute |
 
 ## Domain: UCI Online Retail II (GBP)
 

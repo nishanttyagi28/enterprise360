@@ -1,5 +1,5 @@
-# Enterprise360 KPI record schema v1.1.0 (validated by tests/unit/test_kpi_dictionary.py)
-schema_version: 1.1.0
+# Enterprise360 KPI record schema v1.2.0 (validated by tests/unit/test_kpi_dictionary.py)
+schema_version: 1.2.0
 required_fields: [id, name, domain, status, definition, formula, numerator, denominator, unit, source, source_tag,
   fact_dependencies, dimension_dependencies, grain, refresh, owner, target, benchmark, validation_rules,
   version, change_log, implementations]
@@ -17,6 +17,8 @@ fields:
   change_log: {type: "list[{version, date, author, change, pr}]"}
   implementations: {type: map, keys: [dbt, sql, power_bi_dax, streamlit], note: "dbt is authoritative; others consume/reconcile"}
   domain: {type: enum, values: [olist, uci], default: olist, note: "datasets never blended; one KPI = one domain"}
+  area: {type: enum, values: [marketing_funnel, forecasting], optional: true, note: "sub-area within a domain (added 1.2.0)"}
+  caveats: {type: "list[string]", optional: true}
   supporting_measures:
     type: "list[{measure, purpose, kind}]"
     optional: true

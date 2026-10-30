@@ -23,3 +23,16 @@ Dataset in scope: **Olist Brazilian E-Commerce Public Dataset** (Kaggle `olistbr
 - A4 dbt names CONFIRMED against DE models (2026-10-30), incl. int_olist__zip_prefix_centroid, int_olist__order_items_aggregated, int_olist__order_payments_aggregated, int_olist__order_items_enriched, int_olist__month_coverage; dim_date flags is_complete_month, is_low_volume_month, is_reporting_month.
 - A5 Power BI measure names in docs/kpi-catalog.md are proposals; no powerbi/ files existed.
 - A6 Estimated delivery date is Olist's customer estimate, not a contractual SLA.
+
+## Olist Marketing Funnel (KPI dictionary 2.1.0, 2026-10-31)
+- L-F1 Separate dataset: 8,000 MQLs (first_contact 2017-06-14..2018-05-31) and 842 closed deals (won 2017-12-05..2018-11-14); all 842 deals match an MQL. Only 380 of 842 closed-deal seller_ids appear in olist_order_items; funnel and order KPIs are not joined except via seller_id with that caveat.
+- L-F2 No marketing spend/impressions: CAC, ROAS, CTR, ROI not supported. `declared_monthly_revenue` is seller self-declared (94.7% zero) — not revenue, not a KPI.
+- L-F3 Conversion is by first-contact cohort (overall 10.53%). Deal capture starts Dec 2017, so 2017 cohorts look low (0.84%–5.5%) partly by data artefact; 2018 cohorts are right-censored. Maturity window 162 days (observed p90 days-to-close; p95 210).
+- L-F4 Median days to close = 14 (841 deals; 1 negative duration of -2 days excluded, WARN). Non-additive; never average.
+- L-F5 Sparse columns in closed deals: has_company 92.5% null, has_gtin 92.4%, average_stock 92.2%, declared_product_catalog_size 91.8%, lead_behaviour_profile 21.0%. MQL origin 0.75% null plus 1,099 'unknown'.
+- L-F6 dbt models fct_leads, fct_closed_deals, dim_lead_origin, mart_funnel_monthly are announced by DE but not in repo; tests gated by var funnel_models_built (default false).
+
+## GMV forecast / anomaly (exploratory)
+- L-G1 Forecasts and anomaly flags are exploratory and model-based; GMV only (item price), never revenue. Intervals are not guarantees.
+- L-G2 ~20 usable complete reporting months (is_complete_month AND is_reporting_month); 2016 and Sep–Oct 2018 excluded. Black Friday 2017-11-24 and the May 2018 truckers' strike distort fits and will flag.
+- L-G3 Accuracy not yet measured — no DE backtest stored. Mart names (proposed mart_gmv_forecast / mart_gmv_anomalies) TBD by DE; tests gated by var forecast_models_built (default false).
