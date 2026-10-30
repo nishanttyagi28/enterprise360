@@ -1,0 +1,48 @@
+/// Marketplace seller (merchant), not a supplier. Seller state is an attribute only (no Geography relationship, to avoid ambiguous paths).
+table Seller
+	lineageTag: 4a615495-4017-537b-91f1-3aad59cfc332
+
+	column seller_sk
+		dataType: string
+		isHidden
+		lineageTag: 4e233a53-3334-5de4-828a-61bad5bbd107
+		summarizeBy: none
+		sourceColumn: seller_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Seller ID'
+		dataType: string
+		lineageTag: 89c59678-cf2b-5c62-a2c3-911d6553b8be
+		summarizeBy: none
+		sourceColumn: seller_id
+
+		annotation SummarizationSetBy = User
+
+	column 'Seller City'
+		dataType: string
+		lineageTag: fd3f9c7b-4f27-5b60-9775-80cb827dc66d
+		summarizeBy: none
+		sourceColumn: city
+
+		annotation SummarizationSetBy = User
+
+	column 'Seller State'
+		dataType: string
+		lineageTag: ca55ad4a-700a-567e-91d2-5b0814f95b1c
+		summarizeBy: none
+		sourceColumn: state
+
+		annotation SummarizationSetBy = User
+
+	partition Seller = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "dim_seller"]}[Data],
+					Selected = Table.SelectColumns(Data, {"seller_sk", "seller_id", "city", "state"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

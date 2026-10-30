@@ -1,0 +1,12 @@
+check_pattern,kpi_id,weight,layer_override,note
+assert_payments_vs_items_freight,KPI_PAYMENT_VALUE,,core,known exceptions (vouchers/no-item orders) -> warn
+assert_recon_fct_orders_vs_staging,KPI_ORDERS,,core,
+assert_recon_fct_order_items_vs_staging,KPI_GMV,,core,
+assert_recon_fct_payments_vs_staging,KPI_PAYMENT_VALUE,,core,
+assert_recon_marts_vs_facts,KPI_RECON_VARIANCE,,marts,
+assert_recon_fct_orders_items_rollup,KPI_GMV,,core,
+assert_recon_fct_orders_payments_rollup,KPI_PAYMENT_VALUE,,core,
+assert_gmv_ge_net_gmv,KPI_NET_GMV,,core,
+assert_delivery_after_purchase,KPI_DELIVERY_DAYS,,core,
+assert_recon_raw_vs_core_orders,KPI_ORDERS,,core,
+assert_month_coverage_consistent,KPI_GMV_GROWTH,,marts,

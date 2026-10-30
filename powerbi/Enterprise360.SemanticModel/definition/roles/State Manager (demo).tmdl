@@ -1,0 +1,9 @@
+/// DEMO ONLY: static row filter to customer state SP. Replace with a user-to-state mapping table + USERPRINCIPALNAME() for production.
+role 'State Manager (demo)'
+	modelPermission: read
+
+	tablePermission Geography = [State] = "SP"
+
+	tablePermission 'DQ Results' = FALSE ()
+
+	annotation PBI_Id = e3f17bcfa6c2501fa0e9242e5bf03c1a

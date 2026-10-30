@@ -1,0 +1,657 @@
+/// Home table for all explicit measures. Names follow docs/kpi-catalog.md; descriptions carry KPI ids.
+table _Measures
+	lineageTag: bc9655a5-5075-520c-85af-3f61c5256843
+
+	/// KPI_GMV (SUPPORTED): Gross Merchandise Value: SUM(item_price), freight excluded. Not recognized revenue.
+	measure GMV = SUM ( 'Order Item'[item_price] )
+		formatString: R$ #,0
+		displayFolder: Sales
+		lineageTag: fc07342d-9d49-54d0-83a1-b9552c6f64bb
+
+		annotation KPI_Id = KPI_GMV
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_GMV_INCL_FREIGHT (SUPPORTED): GMV plus customer-paid freight.
+	measure 'GMV incl Freight' = [GMV] + [Freight Value]
+		formatString: R$ #,0
+		displayFolder: Sales
+		lineageTag: 61fc7e58-4134-5b16-9a94-89de782d870d
+
+		annotation KPI_Id = KPI_GMV_INCL_FREIGHT
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_NET_GMV (SUPPORTED): GMV of orders not canceled/unavailable.
+	measure 'Net GMV' =
+			CALCULATE (
+				[GMV],
+				KEEPFILTERS ( NOT 'Order'[order_status] IN { "canceled", "unavailable" } )
+			)
+		formatString: R$ #,0
+		displayFolder: Sales
+		lineageTag: cc39f73a-8a13-5586-b760-a07a4e8ae912
+
+		annotation KPI_Id = KPI_NET_GMV
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_FREIGHT (SUPPORTED): Freight charged to customers (customer freight, not logistics cost).
+	measure 'Freight Value' = SUM ( 'Order Item'[freight_value] )
+		formatString: R$ #,0
+		displayFolder: Sales
+		lineageTag: fb8d8c49-d7f3-514f-b988-97f8ff45a9d5
+
+		annotation KPI_Id = KPI_FREIGHT
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_FREIGHT_SHARE (SUPPORTED): Freight Value / GMV (ratio of sums).
+	measure 'Freight Share %' = DIVIDE ( [Freight Value], [GMV] )
+		formatString: 0.0%
+		displayFolder: Sales
+		lineageTag: 8beada0b-1207-5a77-bea9-86025b01a6ea
+
+		annotation KPI_Id = KPI_FREIGHT_SHARE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_GMV_GROWTH (PARTIAL): Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank or when the current or prior month is not complete (dim_date.is_complete_month = false). PARTIAL: first/last coverage months are partial and sparse.
+	measure 'GMV Growth %' =
+			VAR _current = [GMV]
+			VAR _previous = CALCULATE ( [GMV], DATEADD ( 'Date'[Date], -1, MONTH ) )
+			VAR _currentIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), KEEPFILTERS ( 'Date'[is_complete_month] = FALSE () ) ) > 0
+			VAR _previousIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), DATEADD ( 'Date'[Date], -1, MONTH ), KEEPFILTERS ( 'Date'[is_complete_month] = FALSE () ) ) > 0
+			RETURN
+				IF ( ISBLANK ( _current ) || ISBLANK ( _previous ) || _previous = 0 || _currentIncomplete || _previousIncomplete, BLANK (), DIVIDE ( _current - _previous, _previous ) )
+		formatString: 0.0%
+		displayFolder: Sales
+		lineageTag: be617cf4-cda9-5e09-bab1-937a55126a0f
+
+		annotation KPI_Id = KPI_GMV_GROWTH
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Sum of recorded payments. Transaction value, not sales, not cash flow; does not reconcile to items+freight for some orders.
+	measure 'Payment Value' = SUM ( 'Payment'[payment_value] )
+		formatString: R$ #,0
+		displayFolder: Payments
+		lineageTag: 3dbf0507-17b7-5dd7-904e-7286875232b1
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Supporting measure: share of Payment Value by payment type. Payment mix, never sales.
+	measure 'Payment Mix %' =
+			DIVIDE (
+				[Payment Value],
+				CALCULATE ( [Payment Value], REMOVEFILTERS ( 'Payment'[Payment Type] ) )
+			)
+		formatString: 0.0%
+		displayFolder: Payments
+		lineageTag: 6cb3af03-f56b-50fd-b91c-72d12047e27d
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_ORDERS (SUPPORTED): Distinct orders (fct_orders unique on order_id). Under Product/Seller filters counts orders containing those lines.
+	measure Orders =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						COUNTROWS ( 'Order' ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					COUNTROWS ( 'Order' )
+				)
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: 60f52318-f7ea-5c86-98ad-e19e251076cc
+
+		annotation KPI_Id = KPI_ORDERS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_ITEMS_PER_ORDER (SUPPORTED): Supporting measure: order lines (= units; Olist has one unit per line). Numerator of Items per Order.
+	measure 'Items Sold' = COUNTROWS ( 'Order Item' )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: 671393fa-f86c-5e45-82be-988c5ce2d634
+
+		annotation KPI_Id = KPI_ITEMS_PER_ORDER
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_AOV (SUPPORTED): GMV / distinct orders with items (ratio of sums).
+	measure AOV =
+			VAR _ordersWithItems = DISTINCTCOUNT ( 'Order Item'[order_id] )
+			RETURN
+				DIVIDE ( [GMV], _ordersWithItems )
+		formatString: R$ #,0.00
+		displayFolder: Orders
+		lineageTag: 0a3270d0-705d-5575-94b3-a9a2d2b492ce
+
+		annotation KPI_Id = KPI_AOV
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_ITEMS_PER_ORDER (SUPPORTED): Order lines / distinct orders with items.
+	measure 'Items per Order' = DIVIDE ( [Items Sold], DISTINCTCOUNT ( 'Order Item'[order_id] ) )
+		formatString: #,0.00
+		displayFolder: Orders
+		lineageTag: 99cc6093-381a-5eaa-92cb-edebb29fc745
+
+		annotation KPI_Id = KPI_ITEMS_PER_ORDER
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_CANCEL_RATE (SUPPORTED): Orders canceled or unavailable / Orders.
+	measure 'Cancellation Rate %' =
+			VAR _canceled =
+				CALCULATE ( [Orders], KEEPFILTERS ( 'Order'[order_status] IN { "canceled", "unavailable" } ) )
+			RETURN
+				DIVIDE ( _canceled, [Orders] )
+		formatString: 0.0%
+		displayFolder: Orders
+		lineageTag: 4b5fbe71-cb71-56e9-be18-0ac94f425ecf
+
+		annotation KPI_Id = KPI_CANCEL_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_APPROVAL_HOURS (SUPPORTED): Average hours purchase -> approval (negative values excluded).
+	measure 'Avg Approval Hours' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						CALCULATE ( AVERAGE ( 'Order'[hours_to_approve] ), KEEPFILTERS ( 'Order'[hours_to_approve] >= 0 ) ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					CALCULATE ( AVERAGE ( 'Order'[hours_to_approve] ), KEEPFILTERS ( 'Order'[hours_to_approve] >= 0 ) )
+				)
+		formatString: #,0.0
+		displayFolder: Orders
+		lineageTag: 46713fb0-509c-5115-b901-5474dde3f68a
+
+		annotation KPI_Id = KPI_APPROVAL_HOURS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_ACTIVE_CUSTOMERS (SUPPORTED): Distinct customer_unique_id (via customer_sk) with >=1 order in context.
+	measure 'Active Customers' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						DISTINCTCOUNT ( 'Order'[customer_sk] ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					DISTINCTCOUNT ( 'Order'[customer_sk] )
+				)
+		formatString: #,0
+		displayFolder: Customers
+		lineageTag: a0e2f448-ed0c-5ed0-8000-b961c8a10049
+
+		annotation KPI_Id = KPI_ACTIVE_CUSTOMERS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_NEW_CUSTOMERS (SUPPORTED): Active customers whose first order date falls in the selected period (by month = first-order cohort size).
+	measure 'New Customers' =
+			VAR _start = MIN ( 'Date'[Date] )
+			VAR _end = MAX ( 'Date'[Date] )
+			RETURN
+				CALCULATE (
+					COUNTROWS ( 'Customer' ),
+					'Order',
+					KEEPFILTERS ( 'Customer'[First Order Date] >= _start && 'Customer'[First Order Date] <= _end )
+				)
+		formatString: #,0
+		displayFolder: Customers
+		lineageTag: 698f59d0-bf56-56fa-8daa-2e61d0a3ec04
+
+		annotation KPI_Id = KPI_NEW_CUSTOMERS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_REPEAT_RATE (SUPPORTED): Customers (customer_unique_id) with 2+ distinct orders within the selected period / active customers in the period.
+	measure 'Repeat Purchase Rate %' =
+			VAR _customers = VALUES ( 'Order'[customer_sk] )
+			VAR _repeat = COUNTROWS ( FILTER ( _customers, CALCULATE ( COUNTROWS ( 'Order' ) ) >= 2 ) )
+			RETURN
+				DIVIDE ( _repeat, COUNTROWS ( _customers ) )
+		formatString: 0.0%
+		displayFolder: Customers
+		lineageTag: 5ebd39a0-eb98-5030-aaaa-dcf0e6fa375f
+
+		annotation KPI_Id = KPI_REPEAT_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_CUSTOMER_RETENTION (PARTIAL): Customers active in the previous calendar month who order again in the current month / previous-month active. Evaluate at Year Month. PARTIAL: unstable on Olist's low repeat volume; show with [Retention Cohort Size].
+	measure 'Customer Retention %' =
+			VAR _current = VALUES ( 'Order'[customer_sk] )
+			VAR _prior = CALCULATETABLE ( VALUES ( 'Order'[customer_sk] ), DATEADD ( 'Date'[Date], -1, MONTH ) )
+			RETURN
+				DIVIDE ( COUNTROWS ( INTERSECT ( _current, _prior ) ), COUNTROWS ( _prior ) )
+		formatString: 0.0%
+		displayFolder: Customers
+		lineageTag: 92b0a601-df29-53c2-bb39-605b4a99bbc7
+
+		annotation KPI_Id = KPI_CUSTOMER_RETENTION
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_CUSTOMER_RETENTION (PARTIAL): Supporting measure: denominator of Customer Retention % (previous-month active customers).
+	measure 'Retention Cohort Size' = CALCULATE ( [Active Customers], DATEADD ( 'Date'[Date], -1, MONTH ) )
+		formatString: #,0
+		displayFolder: Customers
+		lineageTag: df845ff8-b4d7-5d94-bfe7-30d9458421a7
+
+		annotation KPI_Id = KPI_CUSTOMER_RETENTION
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_OTD_RATE (SUPPORTED): Eligible orders (is_otd_eligible: delivered, delivered_customer_at present and >= purchased_at) delivered on/before the estimated date (date comparison) / eligible orders. Estimate is Olist's, not a contractual SLA. Dated by purchase date.
+	measure 'On-Time Delivery %' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						DIVIDE (
+							CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ), KEEPFILTERS ( 'Delivery'[is_on_time] = TRUE () ) ),
+							CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ) )
+						),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					DIVIDE (
+						CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ), KEEPFILTERS ( 'Delivery'[is_on_time] = TRUE () ) ),
+						CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ) )
+					)
+				)
+		formatString: 0.0%
+		displayFolder: Delivery
+		lineageTag: 380a190c-68b7-5d7e-a378-5753d6689967
+
+		annotation KPI_Id = KPI_OTD_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_OTD_RATE (SUPPORTED): Supporting measure: same KPI on the delivery-date role. The Date selection is moved from the purchase date (Date->Order) to Delivery[delivered_date_key] via TREATAS; Customer, Geography, Status and RLS still reach Delivery through Order.
+	measure 'On-Time Delivery % (by Delivery Date)' =
+			CALCULATE (
+				[On-Time Delivery %],
+				REMOVEFILTERS ( 'Date' ),
+				TREATAS ( VALUES ( 'Date'[date_key] ), 'Delivery'[delivered_date_key] )
+			)
+		formatString: 0.0%
+		displayFolder: Delivery
+		lineageTag: 797d9739-5383-5824-9aec-de34d8bf62f0
+
+		annotation KPI_Id = KPI_OTD_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_OTD_RATE (SUPPORTED): Supporting measure: eligible orders delivered after the estimated date (complement of the OTD numerator).
+	measure 'Late Orders' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ), KEEPFILTERS ( 'Delivery'[is_on_time] = FALSE () ) ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ), KEEPFILTERS ( 'Delivery'[is_on_time] = FALSE () ) )
+				)
+		formatString: #,0
+		displayFolder: Delivery
+		lineageTag: a736b08a-d877-5046-8646-3ed790fbac12
+
+		annotation KPI_Id = KPI_OTD_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_SELLER_HANDOVER_OTD (PARTIAL): Order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item's shipping_limit_at (full timestamp comparison, computed in dbt as fct_order_items.is_handover_on_time) / items with both timestamps. shipping_limit_at is Olist's seller shipping deadline, not a contractual SLA. PARTIAL: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time.
+	measure 'Seller Handover On-Time %' =
+			DIVIDE (
+				CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( 'Order Item'[is_handover_on_time] = TRUE () ) ),
+				CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( NOT ISBLANK ( 'Order Item'[is_handover_on_time] ) ) )
+			)
+		formatString: 0.0%
+		displayFolder: Delivery
+		lineageTag: d294ebbe-99e2-567f-8cc9-cdfda4808fdd
+
+		annotation KPI_Id = KPI_SELLER_HANDOVER_OTD
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_SELLER_HANDOVER_OTD (PARTIAL): Data-quality exclusion count, not an operational KPI: order items missing delivered_carrier_at or shipping_limit_at (is_handover_on_time is NULL), excluded from Seller Handover On-Time %.
+	measure 'Handover Missing Timestamp' = CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( ISBLANK ( 'Order Item'[is_handover_on_time] ) ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 6828122c-e700-5a87-abb0-d78d9a3aecee
+
+		annotation KPI_Id = KPI_SELLER_HANDOVER_OTD
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_DELIVERY_DAYS (SUPPORTED): Average days purchase -> customer delivery over is_otd_eligible orders only (same filter as OTD).
+	measure 'Avg Delivery Days' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						CALCULATE ( AVERAGE ( 'Delivery'[delivery_days] ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ) ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					CALCULATE ( AVERAGE ( 'Delivery'[delivery_days] ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ) )
+				)
+		formatString: #,0.0
+		displayFolder: Delivery
+		lineageTag: f3f8724c-f0f3-514b-8ce5-a4ab1adc63d4
+
+		annotation KPI_Id = KPI_DELIVERY_DAYS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_REVIEW_SCORE (SUPPORTED): Mean latest review score per order (fct_orders.latest_review_score), 1-5. CSAT proxy, not surveyed CSAT.
+	measure 'Avg Review Score' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						AVERAGE ( 'Order'[Review Score] ),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					AVERAGE ( 'Order'[Review Score] )
+				)
+		formatString: 0.00
+		displayFolder: Reviews
+		lineageTag: 33e1a691-dc73-5c1b-a9a0-8b89ee852cae
+
+		annotation KPI_Id = KPI_REVIEW_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_LOW_REVIEW_RATE (SUPPORTED): Orders with latest score <= 2 / orders reviewed.
+	measure 'Low Review %' =
+			VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )
+			RETURN
+				IF (
+					_lineFiltered,
+					CALCULATE (
+						DIVIDE (
+							CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) && 'Order'[Review Score] <= 2 ) ),
+							CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) ) )
+						),
+						CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )
+					),
+					DIVIDE (
+						CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) && 'Order'[Review Score] <= 2 ) ),
+						CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) ) )
+					)
+				)
+		formatString: 0.0%
+		displayFolder: Reviews
+		lineageTag: e772de4d-c6fb-5fc8-8122-72b0cd75c0c7
+
+		annotation KPI_Id = KPI_LOW_REVIEW_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Sum of weights of checks with status pass / sum of all weights (warn counts as not pass). Latest run_at unless a run is selected.
+	measure 'DQ Score %' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					DIVIDE (
+						CALCULATE ( SUM ( 'DQ Results'[weight] ), KEEPFILTERS ( 'DQ Results'[Status] = "pass" ) ),
+						SUM ( 'DQ Results'[weight] )
+					),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: 0.0%
+		displayFolder: Data Quality
+		lineageTag: 86b4891f-5ae2-5be4-94d3-be0d8a2956bc
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_RECON_VARIANCE (SUPPORTED): Sum of (mart_value - source_value) over checks with a source_value; slice by KPI ID. Latest run unless a run is selected.
+	measure 'Reconciliation Variance' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					SUMX (
+						FILTER ( 'DQ Results', NOT ISBLANK ( 'DQ Results'[source_value] ) ),
+						'DQ Results'[mart_value] - 'DQ Results'[source_value]
+					),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: #,0.00
+		displayFolder: Data Quality
+		lineageTag: 0b4c617a-4d4e-51fe-aace-ddbe85a96e52
+
+		annotation KPI_Id = KPI_RECON_VARIANCE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: checks with status fail in the latest (or selected) run.
+	measure 'Checks Failed' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = "fail" ) ),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 12f7df43-1fc8-548e-a88f-48297951becf
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: checks with status warn in the latest (or selected) run.
+	measure 'Checks Warned' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = "warn" ) ),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 9ad53076-5a00-5cdc-850f-e8f293d777a3
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: failed checks with severity block in the latest (or selected) run.
+	measure 'Blocking Failures' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					CALCULATE (
+						COUNTROWS ( 'DQ Results' ),
+						KEEPFILTERS ( 'DQ Results'[Status] = "fail" ),
+						KEEPFILTERS ( 'DQ Results'[Severity] = "block" )
+					),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 77b9b54c-2550-5c95-b64f-d5be5bf96db3
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Supporting measure: sum of failing_rows in the latest (or selected) run.
+	measure 'Failing Rows' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					SUM ( 'DQ Results'[failing_rows] ),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 031dca63-276f-5ce0-9cf5-019c15cdb39d
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DQ_SCORE (SUPPORTED): Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden.
+	measure 'DQ Status Colour' =
+			VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )
+			VAR _runAt =
+				IF (
+					_runSelected,
+					MAX ( 'DQ Results'[Run At] ),
+					CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )
+				)
+			RETURN
+				CALCULATE (
+					SWITCH (
+						SELECTEDVALUE ( 'DQ Results'[Status] ),
+						"pass", "#10B981",
+						"warn", "#F59E0B",
+						"fail", "#EF4444",
+						"#64748B"
+					),
+					REMOVEFILTERS ( 'DQ Results'[Run ID] ),
+					'DQ Results'[Run At] = _runAt
+				)
+		isHidden
+		displayFolder: Data Quality
+		lineageTag: faf02164-0e08-53fe-aab3-0a859086f7ca
+
+		annotation KPI_Id = KPI_DQ_SCORE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Supporting DQ measure from fct_orders: orders where |payments - (items+freight)| > 0.01 BRL (validation rule of KPI_PAYMENT_VALUE).
+	measure 'Payment Mismatch Orders' = CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: f508fa37-1f68-5b70-b2a9-220ceb766a6f
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_OTD_RATE (SUPPORTED): Data-quality exclusion count, not an operational KPI: delivered orders without delivered_customer_at, excluded from OTD and delivery-days KPIs (fct_deliveries.dq_missing_delivery_ts).
+	measure 'Delivered Missing Timestamp' = CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[dq_missing_delivery_ts] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: aea166f5-9dc3-532a-915c-bc6c4805405b
+
+		annotation KPI_Id = KPI_OTD_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_DELIVERY_DAYS (SUPPORTED): Data-quality exclusion count, not an operational KPI: delivery timestamp before purchase, excluded from OTD and delivery-days KPIs (fct_deliveries.dq_delivered_before_purchase).
+	measure 'Delivered Before Purchase' = CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[dq_delivered_before_purchase] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 5d6cb5dc-2be6-5e7e-b944-218570402eda
+
+		annotation KPI_Id = KPI_DELIVERY_DAYS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_OTD_RATE (SUPPORTED): Supporting measure: OTD denominator (is_otd_eligible = true).
+	measure 'OTD Eligible Orders' = CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 1a7098d3-823f-5fdf-b4e5-e7f3475e4b5b
+
+		annotation KPI_Id = KPI_OTD_RATE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_PAYMENT_VALUE (SUPPORTED): Supporting DQ measure: row count of fct_payments in context.
+	measure 'Payment Records' = COUNTROWS ( 'Payment' )
+		formatString: #,0
+		displayFolder: Data Quality
+		lineageTag: 597b06e7-d840-5dc4-8496-8e345444a870
+
+		annotation KPI_Id = KPI_PAYMENT_VALUE
+
+		annotation KPI_Status = SUPPORTED
+
+	column Value
+		dataType: string
+		isHidden
+		lineageTag: fcb530d4-19e3-5999-88be-71a1d106e2b8
+		summarizeBy: none
+		sourceColumn: Value
+
+		annotation SummarizationSetBy = Automatic
+
+	partition _Measures = m
+		mode: import
+		source =
+				let
+					Source = #table(type table [Value = text], {})
+				in
+					Source
+
+	annotation PBI_ResultType = Table

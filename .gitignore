@@ -1,0 +1,24 @@
+# --- data (large, licensed; downloaded locally, never committed) ---
+data/raw/
+data/processed/
+datasets/
+# --- secrets ---
+.env
+# --- python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+# --- dbt ---
+dbt_enterprise360/target/
+dbt_enterprise360/dbt_packages/
+dbt_enterprise360/logs/
+logs/
+*.log
+# --- tooling ---
+.prefect/
+.vscode/*
+!.vscode/extensions.json

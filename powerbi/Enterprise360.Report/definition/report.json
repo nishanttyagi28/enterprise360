@@ -1,0 +1,32 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.1.0/schema.json",
+  "themeCollection": {
+    "customTheme": {
+      "name": "Enterprise360Dark.json",
+      "reportVersionAtImport": {
+        "visual": "2.5.0",
+        "report": "3.1.0",
+        "page": "2.0.0"
+      },
+      "type": "RegisteredResources"
+    }
+  },
+  "resourcePackages": [
+    {
+      "name": "RegisteredResources",
+      "type": "RegisteredResources",
+      "items": [
+        {
+          "name": "Enterprise360Dark.json",
+          "path": "Enterprise360Dark.json",
+          "type": "CustomTheme"
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "useStylableVisualContainerHeader": true,
+    "defaultDrillFilterOtherVisuals": true,
+    "exportDataMode": "AllowSummarized"
+  }
+}

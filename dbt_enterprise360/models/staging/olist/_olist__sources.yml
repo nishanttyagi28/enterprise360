@@ -1,0 +1,62 @@
+version: 2
+sources:
+  - name: olist
+    description: Kaggle olistbr/brazilian-ecommerce (CC BY-NC-SA 4.0), landed verbatim by `python -m ingestion olist`.
+    schema: raw
+    loaded_at_field: _ingested_at
+    # Olist is a static historical snapshot; freshness monitors the *pipeline* (last successful load),
+    # not business recency. Thresholds sized for a daily batch.
+    freshness:
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 7, period: day}
+    tables:
+      - name: olist_orders
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests:
+              - not_null
+              - relationships: {to: "source('olist', 'olist_customers')", field: customer_id}
+      - name: olist_customers
+        columns:
+          - name: customer_id
+            tests: [not_null, unique]
+          - name: customer_unique_id
+            tests: [not_null]
+      - name: olist_order_items
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [order_id, order_item_id]}
+        columns:
+          - name: order_id
+            tests:
+              - relationships: {to: "source('olist', 'olist_orders')", field: order_id}
+          - name: product_id
+            tests:
+              - relationships: {to: "source('olist', 'olist_products')", field: product_id}
+          - name: seller_id
+            tests:
+              - relationships: {to: "source('olist', 'olist_sellers')", field: seller_id}
+      - name: olist_order_payments
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [order_id, payment_sequential]}
+      - name: olist_order_reviews
+        description: review_id alone is NOT unique (789 review_ids span several orders); grain = (review_id, order_id).
+        tests:
+          - dbt_utils.unique_combination_of_columns: {combination_of_columns: [review_id, order_id]}
+      - name: olist_products
+        columns:
+          - name: product_id
+            tests: [not_null, unique]
+      - name: olist_sellers
+        columns:
+          - name: seller_id
+            tests: [not_null, unique]
+      - name: olist_geolocation
+        description: Many points per zip prefix (incl. exact duplicates) - never join directly; use int_olist__zip_prefix_centroid.
+        freshness: null
+      - name: olist_product_category_name_translation
+        freshness: null
+        columns:
+          - name: product_category_name
+            tests: [not_null, unique]

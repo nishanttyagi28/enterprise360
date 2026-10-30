@@ -1,0 +1,66 @@
+/// One row per customer_unique_id (the real person). customer_id is per-order in Olist and is not used for repeat logic.
+table Customer
+	lineageTag: 017c3b73-858f-56d5-8be7-9ff18da823d9
+
+	column customer_sk
+		dataType: string
+		isHidden
+		lineageTag: 0506e185-3d00-5eee-9230-8c646084ce81
+		summarizeBy: none
+		sourceColumn: customer_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Customer Unique ID'
+		dataType: string
+		lineageTag: 84d4ebd7-ef6a-5816-8e72-e4d3fe648bc4
+		summarizeBy: none
+		sourceColumn: customer_unique_id
+
+		annotation SummarizationSetBy = User
+
+	column customer_state
+		dataType: string
+		isHidden
+		lineageTag: 4f7ec3f6-eb7f-53d2-b536-e72beb58dbd7
+		summarizeBy: none
+		sourceColumn: state
+
+		annotation SummarizationSetBy = User
+
+	column 'Customer City'
+		dataType: string
+		lineageTag: 82385d2d-5f75-5eed-9a0a-24d91bfedffb
+		summarizeBy: none
+		sourceColumn: city
+
+		annotation SummarizationSetBy = User
+
+	column 'First Order Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 79b12884-d4a6-5b96-9dea-21c8fa6f6b25
+		summarizeBy: none
+		sourceColumn: first_order_date
+
+		annotation SummarizationSetBy = User
+
+	column 'Lifetime Orders'
+		dataType: int64
+		lineageTag: 5f393365-cbdf-57ff-a6b7-1be76bfab596
+		summarizeBy: none
+		sourceColumn: lifetime_orders
+
+		annotation SummarizationSetBy = User
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "dim_customer"]}[Data],
+					Selected = Table.SelectColumns(Data, {"customer_sk", "customer_unique_id", "state", "city", "first_order_date", "lifetime_orders"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

@@ -1,0 +1,72 @@
+/// Time intelligence calculation group. Requires the marked Date table. YoY on GMV is PARTIAL (coverage).
+table 'Time Intelligence'
+	lineageTag: 64e74fe3-e965-5eb4-90e8-be1bc1d264e1
+
+	calculationGroup
+		precedence: 10
+
+		calculationItem Current = SELECTEDMEASURE ()
+			ordinal: 0
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem MTD = CALCULATE ( SELECTEDMEASURE (), DATESMTD ( 'Date'[Date] ) )
+			ordinal: 1
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem QTD = CALCULATE ( SELECTEDMEASURE (), DATESQTD ( 'Date'[Date] ) )
+			ordinal: 2
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem YTD = CALCULATE ( SELECTEDMEASURE (), DATESYTD ( 'Date'[Date] ) )
+			ordinal: 3
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem PY = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+			ordinal: 4
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem YoY =
+				VAR _current = SELECTEDMEASURE ()
+				VAR _py = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+				RETURN
+					IF ( NOT ISBLANK ( _current ) && NOT ISBLANK ( _py ), _current - _py )
+			ordinal: 5
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+		calculationItem 'YoY %' =
+				VAR _current = SELECTEDMEASURE ()
+				VAR _py = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+				RETURN
+					IF ( NOT ISBLANK ( _current ) && NOT ISBLANK ( _py ), DIVIDE ( _current - _py, _py ) )
+			ordinal: 6
+			formatStringDefinition = "0.0%"
+
+		calculationItem 'Rolling 12M' =
+				CALCULATE (
+					SELECTEDMEASURE (),
+					DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH )
+				)
+			ordinal: 7
+			formatStringDefinition = SELECTEDMEASUREFORMATSTRING ()
+
+	column 'Time Calculation'
+		dataType: string
+		lineageTag: 7a0adcb4-caa2-599b-8b3b-9da9cf239f3c
+		summarizeBy: none
+		sourceColumn: Name
+		sortByColumn: Ordinal
+
+		annotation SummarizationSetBy = Automatic
+
+	column Ordinal
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: f69fd4aa-002e-58dd-8e35-403193bff0cb
+		summarizeBy: none
+		sourceColumn: Ordinal
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Time Intelligence' = calculationGroup
+		mode: import

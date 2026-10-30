@@ -1,0 +1,17 @@
+/// PostgreSQL server as host:port (laptop: localhost:5432).
+expression PgServer = "localhost:5432" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: f0ff0d0f-1d1b-5c56-b3f6-76262017ac37
+
+	annotation PBI_ResultType = Text
+
+/// PostgreSQL database.
+expression PgDatabase = "enterprise360" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: 7fcad45b-75cf-535b-85f9-15300fe5ae40
+
+	annotation PBI_ResultType = Text
+
+/// Schema holding the dbt core facts/dimensions (dbt +schema: core).
+expression PgSchema = "core" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: eb5fe892-490a-5eb7-a731-36169b199f02
+
+	annotation PBI_ResultType = Text

@@ -1,0 +1,43 @@
+/// Customer state (UF) level. State-level on purpose: zip-prefix geolocation has many rows per prefix. State name/region are IBGE reference data.
+table Geography
+	lineageTag: 194cffd6-76f2-5ff9-8779-c1d8e4f26a23
+
+	column State
+		dataType: string
+		lineageTag: e2fd9902-dcd2-5135-a105-167f73cfadd7
+		summarizeBy: none
+		sourceColumn: state_code
+
+		annotation SummarizationSetBy = User
+
+	column 'State Name'
+		dataType: string
+		lineageTag: 4b1c5bc2-1f31-5e46-89d1-4ce25b7add25
+		summarizeBy: none
+		sourceColumn: state_name
+
+		annotation SummarizationSetBy = User
+
+	column Region
+		dataType: string
+		lineageTag: 781cd52e-1130-57b6-8879-68b6588c97b5
+		summarizeBy: none
+		sourceColumn: region
+
+		annotation SummarizationSetBy = User
+
+	partition Geography = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "dim_customer"]}[Data],
+					Selected = Table.SelectColumns(Data, {"state"}),
+					States = Table.Distinct(Table.RenameColumns(Selected, {{"state", "state_code"}})),
+					Ref = #table(type table [uf = text, state_name = text, region = text], {{"AC", "Acre", "North"}, {"AL", "Alagoas", "Northeast"}, {"AP", "Amapá", "North"}, {"AM", "Amazonas", "North"}, {"BA", "Bahia", "Northeast"}, {"CE", "Ceará", "Northeast"}, {"DF", "Distrito Federal", "Center-West"}, {"ES", "Espírito Santo", "Southeast"}, {"GO", "Goiás", "Center-West"}, {"MA", "Maranhão", "Northeast"}, {"MT", "Mato Grosso", "Center-West"}, {"MS", "Mato Grosso do Sul", "Center-West"}, {"MG", "Minas Gerais", "Southeast"}, {"PA", "Pará", "North"}, {"PB", "Paraíba", "Northeast"}, {"PR", "Paraná", "South"}, {"PE", "Pernambuco", "Northeast"}, {"PI", "Piauí", "Northeast"}, {"RJ", "Rio de Janeiro", "Southeast"}, {"RN", "Rio Grande do Norte", "Northeast"}, {"RS", "Rio Grande do Sul", "South"}, {"RO", "Rondônia", "North"}, {"RR", "Roraima", "North"}, {"SC", "Santa Catarina", "South"}, {"SP", "São Paulo", "Southeast"}, {"SE", "Sergipe", "Northeast"}, {"TO", "Tocantins", "North"}}),
+					Joined = Table.NestedJoin(States, {"state_code"}, Ref, {"uf"}, "ref", JoinKind.LeftOuter),
+					Expanded = Table.ExpandTableColumn(Joined, "ref", {"state_name", "region"})
+				in
+					Expanded
+
+	annotation PBI_ResultType = Table

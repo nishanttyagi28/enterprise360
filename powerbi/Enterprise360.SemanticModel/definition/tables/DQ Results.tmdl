@@ -1,0 +1,135 @@
+/// core.dq_results: one row per run_id x check_id, appended history. Standalone: no relationships to the Olist star.
+table 'DQ Results'
+	lineageTag: 86ace94b-2749-5dca-b152-13a008fa51ac
+
+	column 'Run ID'
+		dataType: string
+		lineageTag: a05b6e6f-b039-528f-985e-5ce7522db58f
+		summarizeBy: none
+		sourceColumn: run_id
+
+		annotation SummarizationSetBy = User
+
+	column 'Run At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: a84d7f59-f684-5b4e-bf13-40079ffadc7b
+		summarizeBy: none
+		sourceColumn: run_at
+
+		annotation SummarizationSetBy = User
+
+	column check_id
+		dataType: string
+		isHidden
+		lineageTag: fe32079b-d225-5c65-bae0-b025dd4415b4
+		summarizeBy: none
+		sourceColumn: check_id
+
+		annotation SummarizationSetBy = User
+
+	column Check
+		dataType: string
+		lineageTag: 0f4e8bef-4d41-5c13-9fd6-b9b883c60ea0
+		summarizeBy: none
+		sourceColumn: check_name
+
+		annotation SummarizationSetBy = User
+
+	column Layer
+		dataType: string
+		lineageTag: eaf1f5a3-6155-59b1-b9b4-afbd8ad8d310
+		summarizeBy: none
+		sourceColumn: layer
+
+		annotation SummarizationSetBy = User
+
+	column Model
+		dataType: string
+		lineageTag: 2464cf73-cd81-546a-bea6-d3ebfcd5f67b
+		summarizeBy: none
+		sourceColumn: model_name
+
+		annotation SummarizationSetBy = User
+
+	column 'KPI ID'
+		dataType: string
+		lineageTag: ab17ca51-ef52-5acd-a8f8-f0bf5c8efbb2
+		summarizeBy: none
+		sourceColumn: kpi_id
+
+		annotation SummarizationSetBy = User
+
+	column Severity
+		dataType: string
+		lineageTag: 584e6ea2-1161-5893-8945-f98e8d64a278
+		summarizeBy: none
+		sourceColumn: severity
+
+		annotation SummarizationSetBy = User
+
+	column weight
+		dataType: double
+		isHidden
+		lineageTag: 066f0d5a-31b0-552c-bc23-b4dd29d3bc47
+		summarizeBy: none
+		sourceColumn: weight
+
+		annotation SummarizationSetBy = User
+
+	column Status
+		dataType: string
+		lineageTag: fef83ec8-e403-5ece-8b85-62329e5ab66a
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = User
+
+	column failing_rows
+		dataType: int64
+		isHidden
+		lineageTag: 5ec8d333-188f-5481-837c-deb8d39e4451
+		summarizeBy: none
+		sourceColumn: failing_rows
+
+		annotation SummarizationSetBy = User
+
+	column source_value
+		dataType: double
+		isHidden
+		lineageTag: 27515537-58c4-55b1-a8a2-912c6711203c
+		summarizeBy: none
+		sourceColumn: source_value
+
+		annotation SummarizationSetBy = User
+
+	column mart_value
+		dataType: double
+		isHidden
+		lineageTag: b584e744-516b-5fa8-9b5e-5051cef87bfb
+		summarizeBy: none
+		sourceColumn: mart_value
+
+		annotation SummarizationSetBy = User
+
+	column variance
+		dataType: double
+		isHidden
+		lineageTag: ea3fc57b-ebf7-518c-8177-61bbbd60ea19
+		summarizeBy: none
+		sourceColumn: variance
+
+		annotation SummarizationSetBy = User
+
+	partition 'DQ Results' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = try Source{[Schema = PgSchema, Item = "dq_results"]}[Data] otherwise #table(type table [run_id = any, run_at = any, check_id = any, check_name = any, layer = any, model_name = any, kpi_id = any, severity = any, weight = any, status = any, failing_rows = any, source_value = any, mart_value = any, variance = any], {}),
+					Selected = Table.SelectColumns(Data, {"run_id", "run_at", "check_id", "check_name", "layer", "model_name", "kpi_id", "severity", "weight", "status", "failing_rows", "source_value", "mart_value", "variance"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"run_id", type text}, {"check_id", type text}, {"run_at", type datetime}, {"weight", type number}, {"failing_rows", Int64.Type}, {"source_value", type number}, {"mart_value", type number}, {"variance", type number}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

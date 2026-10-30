@@ -1,0 +1,35 @@
+version: 2
+models:
+  - name: mart_sales_daily
+    description: Daily sales KPIs (KPI_ORDERS, KPI_GMV, KPI_NET_GMV, KPI_FREIGHT, KPI_PAYMENT_VALUE, KPI_AOV...).
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+    tests:
+      - dbt_utils.expression_is_true: {expression: "gmv >= net_gmv"}
+  - name: mart_sales_by_seller_monthly
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [month_start, seller_sk]}
+  - name: mart_sales_by_category_monthly
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [month_start, category_name_en, category_name_pt]}
+  - name: mart_operations_delivery_performance
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [month_start, customer_state]}
+    columns:
+      - name: otd_rate
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 1}
+  - name: mart_business_overview_monthly
+    columns:
+      - name: month_start
+        tests: [unique, not_null]
+    tests:
+      - dbt_utils.expression_is_true: {expression: "active_customers >= new_customers"}
+  - name: mart_customer_cohorts
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [cohort_month, months_since_first_order]}
+    columns:
+      - name: retention_rate
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 1}

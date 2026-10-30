@@ -1,0 +1,35 @@
+relationship 1236d969-8c50-565b-86c9-afaee2c3ac4e
+	fromColumn: 'Order Item'.order_id
+	toColumn: Order.'Order ID'
+
+relationship e0c478f5-d075-5624-8668-1c1be876e8cd
+	fromColumn: 'Order Item'.product_sk
+	toColumn: Product.product_sk
+
+relationship 55351c81-b4ed-5f5d-8502-bca93770faff
+	fromColumn: 'Order Item'.seller_sk
+	toColumn: Seller.seller_sk
+
+relationship 6025a9b1-5ff1-5300-9c3b-caec356bb58c
+	fromColumn: Payment.order_id
+	toColumn: Order.'Order ID'
+
+relationship 26f1d8bd-c5fd-5d1e-bbf5-a186a8352cde
+	fromColumn: Delivery.order_id
+	toColumn: Order.'Order ID'
+
+relationship 47e70086-9714-5eb0-9b51-e0da092ee182
+	fromColumn: Order.customer_sk
+	toColumn: Customer.customer_sk
+
+relationship fdcf6743-bd6f-578a-baa2-6bbaba932ca9
+	fromColumn: Order.order_status
+	toColumn: 'Order Status'.order_status
+
+relationship b60899a1-1a5c-5204-933b-94c21ab30dc4
+	fromColumn: Order.purchase_date_key
+	toColumn: Date.date_key
+
+relationship bb72f534-349e-52ac-aa7b-f16144672736
+	fromColumn: Customer.customer_state
+	toColumn: Geography.State

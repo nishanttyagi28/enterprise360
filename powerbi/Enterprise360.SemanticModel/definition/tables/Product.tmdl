@@ -1,0 +1,48 @@
+/// Product with English category (falls back to Portuguese name where no translation exists, per STTM 2.7).
+table Product
+	lineageTag: 0e792457-3e2d-51d0-9c21-ff318d422b6e
+
+	column product_sk
+		dataType: string
+		isHidden
+		lineageTag: 135c8fbb-112a-52c5-ab39-26e183a83a81
+		summarizeBy: none
+		sourceColumn: product_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Product ID'
+		dataType: string
+		lineageTag: 8e833cc9-7a16-5be7-a729-dca430b954c7
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = User
+
+	column Category
+		dataType: string
+		lineageTag: e9b55493-66f6-5e26-9172-3f9579715532
+		summarizeBy: none
+		sourceColumn: category_name_en
+
+		annotation SummarizationSetBy = User
+
+	column 'Category (PT)'
+		dataType: string
+		lineageTag: e8b0f143-a503-5f60-99d0-ea22c427a9ae
+		summarizeBy: none
+		sourceColumn: category_name_pt
+
+		annotation SummarizationSetBy = User
+
+	partition Product = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "dim_product"]}[Data],
+					Selected = Table.SelectColumns(Data, {"product_sk", "product_id", "category_name_en", "category_name_pt"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

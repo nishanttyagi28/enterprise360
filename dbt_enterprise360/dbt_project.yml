@@ -1,0 +1,66 @@
+name: enterprise360
+version: "0.1.0"
+config-version: 2
+profile: enterprise360
+require-dbt-version: [">=1.8.0", "<2.0.0"]
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+seed-paths: ["seeds"]
+clean-targets: ["target", "dbt_packages"]
+
+# DQ history: see macros/dq_results_log.sql and models/dq/
+on-run-start:
+  - "{{ dq_ensure_log_table() }}"
+on-run-end:
+  - "{{ dq_log_results(results) }}"
+
+vars:
+  # dim_date spine bounds: cover Olist purchases (2016-09) through estimated deliveries (2018-11)
+  date_spine_start: "2016-01-01"
+  date_spine_end: "2019-12-31"
+  # month counts as low-volume below this share of the median complete-month order count
+  olist_low_volume_ratio: 0.1
+  # Brazil bounding box used to discard impossible geolocation points (STTM §2.9)
+  brazil_lat_min: -34.0
+  brazil_lat_max: 6.0
+  brazil_lng_min: -74.0
+  brazil_lng_max: -34.0
+
+models:
+  enterprise360:
+    +persist_docs: {relation: true, columns: true}
+    staging:
+      +schema: staging
+      +materialized: view   # thin rename/cast layer; always reflects raw
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    dimensions:
+      +schema: core
+      +materialized: table
+    facts:
+      +schema: core
+      +materialized: table
+    dq:
+      +schema: core          # Power BI reads core; dq_results is the stable BI-facing relation
+    marts:
+      +schema: marts
+      +materialized: table   # Power BI import reads small pre-aggregated tables
+
+seeds:
+  enterprise360:
+    +schema: core
+    dq_check_config:
+      +column_types: {check_pattern: text, kpi_id: text, weight: numeric, layer_override: text}
+
+snapshots:
+  enterprise360:
+    +target_schema: snapshots
+
+tests:
+  enterprise360:
+    +store_failures: false

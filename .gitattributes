@@ -1,0 +1,10 @@
+# Normalise to LF in the repo; Windows checkouts get CRLF only where tools need it.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Fixture CSVs are byte-exact test inputs (sha256-hashed by tests) -> never convert.
+*.csv -text
+*.zip binary
+*.xlsx binary
+*.pbix binary

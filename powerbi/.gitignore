@@ -1,0 +1,6 @@
+# Power BI local / generated artefacts
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+**/.pbi/unappliedChanges.json
+*.pbix
+__pycache__/

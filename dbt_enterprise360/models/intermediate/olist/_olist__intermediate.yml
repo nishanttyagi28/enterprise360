@@ -1,0 +1,31 @@
+version: 2
+models:
+  - name: int_olist__customer_order_map
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: customer_sk
+        tests: [not_null]
+  - name: int_olist__zip_prefix_centroid
+    columns:
+      - name: zip_prefix
+        tests: [unique, not_null]
+  - name: int_olist__order_items_aggregated
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+  - name: int_olist__order_payments_aggregated
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+  - name: int_olist__order_review_latest
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+  - name: int_olist__order_items_enriched
+    tests:
+      - row_count_matches: {compare_model: "ref('stg_olist__order_items')"}
+  - name: int_olist__month_coverage
+    columns:
+      - name: month_start
+        tests: [unique, not_null]

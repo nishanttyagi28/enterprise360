@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "enterprise360"
+version = "0.1.0"
+description = "Enterprise360 retail/e-commerce analytics platform: ingestion, dbt warehouse, orchestration"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "psycopg[binary]>=3.1,<4",
+  "pydantic>=2.6,<3",
+  "pydantic-settings>=2.2,<3",
+  "python-dotenv>=1.0,<2",
+  "structlog>=24.1,<26",
+  "tenacity>=8.2,<10",
+  "typer>=0.12,<1",
+  # dbt 1.10 + postgres adapter 1.9 is the newest pair with Python 3.12 wheels tested here.
+  "dbt-core>=1.8,<1.11",
+  "dbt-postgres>=1.8,<1.10",
+  "prefect>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.6,<1", "mypy>=1.10,<2", "pyyaml>=6,<7"]
+
+[tool.setuptools.packages.find]
+include = ["ingestion*", "orchestration*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["dbt_enterprise360"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PTH", "S"]
+ignore = ["S101", "S608"]  # asserts in tests; S608 = SQL built only from internal contract identifiers via psycopg.sql
+
+[tool.ruff.lint.per-file-ignores]
+# KPI & Quality-owned test modules: compact SQL-in-string style, kept as authored.
+"tests/integration/test_olist_raw_contracts.py" = ["E501"]
+"tests/conftest.py" = ["E501"]
+"tests/unit/test_ingestion.py" = ["E741"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["ingestion", "orchestration"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["prefect.*", "dbt.*"]
+ignore_missing_imports = true
+
+# pytest config lives in pytest.ini (KPI & Quality-owned)

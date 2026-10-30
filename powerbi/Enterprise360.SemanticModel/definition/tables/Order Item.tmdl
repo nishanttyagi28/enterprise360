@@ -1,0 +1,89 @@
+/// Fact at order-line grain (order_id, order_item_id). One row = one unit (Olist has no quantity column).
+table 'Order Item'
+	lineageTag: 3ef0dbe5-2b1f-52b4-a8d3-eecfd4575857
+
+	column order_id
+		dataType: string
+		isHidden
+		lineageTag: 797b1cb2-b10a-51f6-9091-e00cc80f50ed
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = User
+
+	column order_item_id
+		dataType: int64
+		isHidden
+		lineageTag: 852bd340-af1d-5854-ab01-fe34ac21db3f
+		summarizeBy: none
+		sourceColumn: order_item_id
+
+		annotation SummarizationSetBy = User
+
+	column product_sk
+		dataType: string
+		isHidden
+		lineageTag: 71a425bc-51ca-5f63-bb00-331d1e8fdf8a
+		summarizeBy: none
+		sourceColumn: product_sk
+
+		annotation SummarizationSetBy = User
+
+	column seller_sk
+		dataType: string
+		isHidden
+		lineageTag: 5acd7175-0b74-5f6c-b23c-e93dad84583d
+		summarizeBy: none
+		sourceColumn: seller_sk
+
+		annotation SummarizationSetBy = User
+
+	column item_price
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: 37881093-f2cb-50bd-b5bb-7b1b6fa1c8a6
+		summarizeBy: sum
+		sourceColumn: item_price
+
+		annotation SummarizationSetBy = User
+
+	column freight_value
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: 1869cb64-2a58-5917-9add-bdbde59a75e4
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+		annotation SummarizationSetBy = User
+
+	column 'Shipping Limit At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: d97515ee-2cb1-5429-ab20-11b71066675d
+		summarizeBy: none
+		sourceColumn: shipping_limit_at
+
+		annotation SummarizationSetBy = User
+
+	column is_handover_on_time
+		dataType: boolean
+		isHidden
+		lineageTag: abe3e446-5613-5c53-a31a-7f9385341fb4
+		summarizeBy: none
+		sourceColumn: is_handover_on_time
+
+		annotation SummarizationSetBy = User
+
+	partition 'Order Item' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_order_items"]}[Data],
+					Selected = Table.SelectColumns(Data, {"order_id", "order_item_id", "product_sk", "seller_sk", "item_price", "freight_value", "shipping_limit_at", "is_handover_on_time"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

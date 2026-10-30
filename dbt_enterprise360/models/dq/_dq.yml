@@ -1,0 +1,21 @@
+version: 2
+sources:
+  - name: dq
+    schema: dq
+    description: Created by on-run-start (macros/dq_results_log.sql), appended by on-run-end.
+    tables:
+      - name: dq_results_log
+models:
+  - name: dq_reconciliation
+    columns:
+      - name: check_name
+        tests: [unique, not_null]
+  - name: dq_results
+    description: One row per run_id x check_id. status in pass/warn/fail (skipped -> fail); severity block/warn.
+    columns:
+      - name: status
+        tests:
+          - accepted_values: {values: [pass, warn, fail]}
+      - name: severity
+        tests:
+          - accepted_values: {values: [block, warn]}

@@ -1,0 +1,18 @@
+# Enterprise360 KPI record schema v1.1.0 (validated by tests/unit/test_kpi_dictionary.py)
+schema_version: 1.1.0
+required_fields: [id, name, status, definition, formula, numerator, denominator, unit, source, source_tag,
+  fact_dependencies, dimension_dependencies, grain, refresh, owner, target, benchmark, validation_rules,
+  version, change_log, implementations]
+fields:
+  id: {type: string, pattern: "^KPI_[A-Z0-9_]+$", note: "stable, never reused; referenced in PBI measure descriptions"}
+  status: {type: enum, values: [SUPPORTED, PARTIAL]}   # NOT SUPPORTED items live in not_supported.yaml
+  unit: {type: string}
+  source: {type: "list[string]", note: "raw Olist file.column"}
+  fact_dependencies: {type: "list[string]"}
+  dimension_dependencies: {type: "list[string]"}
+  target: {type: string, default: "to be set by owner"}
+  benchmark: {type: string, default: "to be set by owner"}
+  validation_rules: {type: "list[string]"}
+  version: {type: semver}
+  change_log: {type: "list[{version, date, author, change, pr}]"}
+  implementations: {type: map, keys: [dbt, sql, power_bi_dax, streamlit], note: "dbt is authoritative; others consume/reconcile"}

@@ -1,0 +1,76 @@
+"""COPY-based, idempotent loader.
+
+Strategy = *batch replace keyed by file hash*: Olist files are full snapshots (no change
+timestamps, no deletes feed), so the correct idempotent operation is "the raw table equals the
+latest file". Per file, in ONE transaction:
+  1. COPY the file into a session temp table (all text, positional, quote/newline aware);
+  2. replace the raw table contents from the temp table, stamping _ingested_at/_source_file/
+     _batch_id and computing _row_hash in-database;
+  3. commit -> readers see either the old or the new snapshot, never a partial load.
+Re-running with an unchanged file is a no-op (sha256 match in the audit table).
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+from pathlib import Path
+
+import psycopg
+from psycopg import sql
+
+from ingestion.extractors.files import UTF8_BOM, SourceFile
+from ingestion.loaders.hashing import row_hash_sql
+from ingestion.sources.contracts import SourceContract
+
+
+def _iter_chunks(path: Path, chunk_bytes: int) -> Iterator[bytes]:
+    # Binary read: bytes reach COPY untouched (no newline translation on Windows, no locale codepage).
+    with path.open("rb") as fh:
+        first = True
+        while chunk := fh.read(chunk_bytes):
+            if first and chunk.startswith(UTF8_BOM):
+                chunk = chunk[len(UTF8_BOM) :]
+            first = False
+            yield chunk
+
+
+class PostgresLoader:
+    def __init__(self, conn: psycopg.Connection, chunk_bytes: int = 1 << 20) -> None:
+        self._conn = conn
+        self._chunk_bytes = chunk_bytes
+
+    def replace_from_file(self, contract: SourceContract, source: SourceFile, batch_id: uuid.UUID) -> int:
+        tmp = sql.Identifier(f"_stage_{contract.table}")
+        target = sql.Identifier(contract.schema, contract.table)
+        cols = sql.SQL(", ").join(sql.Identifier(c) for c in contract.columns)
+        with self._conn.transaction(), self._conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("create temp table {} ({}) on commit drop").format(
+                    tmp,
+                    sql.SQL(", ").join(
+                        sql.SQL("{} text").format(sql.Identifier(c)) for c in contract.columns
+                    ),
+                )
+            )
+            copy_stmt = sql.SQL(
+                "copy {} ({}) from stdin with (format csv, header true, encoding 'UTF8')"
+            ).format(tmp, cols)
+            with cur.copy(copy_stmt) as copy:
+                for chunk in _iter_chunks(source.path, self._chunk_bytes):
+                    copy.write(chunk)
+            # DELETE (not TRUNCATE): MVCC-safe for concurrent readers, and the table is small
+            # enough that the extra WAL is irrelevant; TRUNCATE would take an ACCESS EXCLUSIVE lock.
+            cur.execute(sql.SQL("delete from {}").format(target))
+            cur.execute(
+                sql.SQL(
+                    """insert into {target} ({cols}, _ingested_at, _source_file, _batch_id, _row_hash)
+                       select {cols}, now(), %s, %s, {hash} from {tmp}"""
+                ).format(target=target, cols=cols, hash=row_hash_sql(contract.columns), tmp=tmp),
+                (source.path.name, batch_id),
+            )
+            rows = cur.rowcount
+            # Fresh planner stats: after a full replace, stale stats made downstream dbt joins pick
+            # nested loops (minutes instead of seconds). ANALYZE is transactional and cheap here.
+            cur.execute(sql.SQL("analyze {}").format(target))
+            return rows

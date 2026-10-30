@@ -1,0 +1,99 @@
+version: 2
+models:
+  - name: fct_orders
+    description: Order grain. Measures are order-level rollups; GMV is merchandise value, NOT revenue.
+    tests:
+      - row_count_matches: {compare_model: "ref('stg_olist__orders')"}
+    columns:
+      - name: order_sk
+        tests: [unique, not_null]
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_sk
+        tests:
+          - not_null
+          - relationships: {to: "ref('dim_customer')", field: customer_sk}
+      - name: geography_sk
+        tests:
+          - relationships: {to: "ref('dim_geography')", field: geography_sk}
+      - name: purchase_date_key
+        tests:
+          - not_null
+          - relationships: {to: "ref('dim_date')", field: date_key}
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+      - name: latest_review_score
+        tests:
+          - accepted_values: {values: [1, 2, 3, 4, 5], quote: false}
+  - name: fct_deliveries
+    tests:
+      - row_count_matches: {compare_model: "ref('stg_olist__orders')"}
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: purchase_date_key
+        tests:
+          - relationships: {to: "ref('dim_date')", field: date_key}
+      - name: delivered_date_key
+        tests:
+          - relationships: {to: "ref('dim_date')", field: date_key}
+  - name: fct_order_items
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [order_id, order_item_id]}
+    columns:
+      - name: order_item_sk
+        tests: [unique, not_null]
+      - name: order_id
+        tests:
+          - relationships: {to: "ref('fct_orders')", field: order_id}
+      - name: product_sk
+        tests:
+          - relationships: {to: "ref('dim_product')", field: product_sk}
+      - name: seller_sk
+        tests:
+          - relationships: {to: "ref('dim_seller')", field: seller_sk}
+      - name: purchase_date_key
+        tests:
+          - relationships: {to: "ref('dim_date')", field: date_key}
+      - name: item_price
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: shipping_limit_at
+        description: Seller SLA deadline (timestamp, Brazil local time); compare to fct_deliveries.delivered_carrier_at.
+        tests: [not_null]
+      - name: is_handover_on_time
+        description: >
+          delivered_carrier_at <= shipping_limit_at (seller handed the line to the carrier by its
+          deadline). NULL when either timestamp is missing. delivered_carrier_at is order-level.
+        tests:
+          - accepted_values: {values: [true, false], quote: false}
+          - not_null:
+              config:
+                where: "delivered_carrier_at is not null and shipping_limit_at is not null"
+  - name: fct_payments
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [order_id, payment_sequential]}
+    columns:
+      - name: payment_sk
+        tests: [unique, not_null]
+      - name: order_id
+        tests:
+          - relationships: {to: "ref('fct_orders')", field: order_id}
+      - name: payment_type
+        tests:
+          - accepted_values: {values: [credit_card, boleto, voucher, debit_card, not_defined]}
+  - name: fct_reviews
+    tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [review_id, order_id]}
+    columns:
+      - name: review_sk
+        tests: [unique, not_null]
+      - name: order_id
+        tests:
+          - relationships: {to: "ref('fct_orders')", field: order_id}
+      - name: review_score
+        tests:
+          - accepted_values: {values: [1, 2, 3, 4, 5], quote: false}

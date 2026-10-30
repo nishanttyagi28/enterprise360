@@ -1,0 +1,230 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.5.0/schema.json",
+  "name": "8e2c29283cb652248214",
+  "position": {
+    "x": 24,
+    "y": 108,
+    "z": 300,
+    "height": 120,
+    "width": 1232,
+    "tabOrder": 300
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Order"
+                    }
+                  },
+                  "Property": "Order ID"
+                }
+              },
+              "queryRef": "Order.Order ID",
+              "nativeQueryRef": "Order ID"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Order Status"
+                    }
+                  },
+                  "Property": "Order Status"
+                }
+              },
+              "queryRef": "Order Status.Order Status",
+              "nativeQueryRef": "Order Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Order"
+                    }
+                  },
+                  "Property": "Purchased At"
+                }
+              },
+              "queryRef": "Order.Purchased At",
+              "nativeQueryRef": "Purchased At"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Order"
+                    }
+                  },
+                  "Property": "Approved At"
+                }
+              },
+              "queryRef": "Order.Approved At",
+              "nativeQueryRef": "Approved At"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Delivery"
+                    }
+                  },
+                  "Property": "Estimated Delivery At"
+                }
+              },
+              "queryRef": "Delivery.Estimated Delivery At",
+              "nativeQueryRef": "Estimated Delivery At"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Delivery"
+                    }
+                  },
+                  "Property": "Delivered At"
+                }
+              },
+              "queryRef": "Delivery.Delivered At",
+              "nativeQueryRef": "Delivered At"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Order"
+                    }
+                  },
+                  "Property": "Review Score"
+                }
+              },
+              "queryRef": "Order.Review Score",
+              "nativeQueryRef": "Review Score"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#111A2E'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1F2A44'"
+                    }
+                  }
+                }
+              }
+            },
+            "radius": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dropShadow": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Order status, delivery timestamps and latest review'"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#E5E7EB'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

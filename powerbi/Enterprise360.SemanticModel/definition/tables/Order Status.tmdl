@@ -1,0 +1,43 @@
+/// Distinct Olist order statuses with a display group.
+table 'Order Status'
+	lineageTag: 4826bb53-1c3e-57e2-a9aa-40549c96bfc8
+
+	column order_status
+		dataType: string
+		isHidden
+		lineageTag: 0e5437f5-2370-51b5-843b-29268fdf0582
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = User
+
+	column 'Order Status'
+		dataType: string
+		lineageTag: 46e4c303-f164-56a3-a507-9d5faf8d0a85
+		summarizeBy: none
+		sourceColumn: Order Status
+
+		annotation SummarizationSetBy = User
+
+	column 'Status Group'
+		dataType: string
+		lineageTag: 572d76b2-1849-55cb-ac46-d4b6ad6804fd
+		summarizeBy: none
+		sourceColumn: Status Group
+
+		annotation SummarizationSetBy = User
+
+	partition 'Order Status' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_orders"]}[Data],
+					Selected = Table.SelectColumns(Data, {"order_status"}),
+					Distinct = Table.Distinct(Selected),
+					Named = Table.AddColumn(Distinct, "Order Status", each Text.Proper([order_status]), type text),
+					Grouped = Table.AddColumn(Named, "Status Group", each if List.Contains({"canceled", "unavailable"}, [order_status]) then "Canceled / Unavailable" else if [order_status] = "delivered" then "Delivered" else "In Progress", type text)
+				in
+					Grouped
+
+	annotation PBI_ResultType = Table

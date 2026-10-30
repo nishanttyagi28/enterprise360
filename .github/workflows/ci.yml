@@ -1,0 +1,53 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-type-test-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: enterprise360_ci
+          POSTGRES_USER: e360_app
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U e360_app -d enterprise360_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: enterprise360_ci
+      E360_TEST_DB: enterprise360_ci     # CI DB is disposable; tests load fixtures into it
+      POSTGRES_USER: e360_app
+      POSTGRES_PASSWORD: ci-only-password
+      E360_OLIST_DIR: tests/fixtures/olist
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e ".[dev]"
+      - name: Ruff
+        run: |
+          ruff check ingestion orchestration tests
+          ruff format --check ingestion orchestration
+      - name: Mypy
+        run: mypy
+      - name: Ingest fixtures
+        run: |
+          python -m ingestion init-db
+          python -m ingestion olist
+      - name: dbt deps + build (fixtures)
+        run: |
+          python -m orchestration.dbt_runner deps
+          python -m orchestration.dbt_runner build
+      - name: Pytest (unit + integration)
+        run: python -m pytest

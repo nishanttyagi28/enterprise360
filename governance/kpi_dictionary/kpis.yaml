@@ -1,0 +1,822 @@
+dataset: Olist Brazilian E-Commerce Public Dataset (Kaggle olistbr/brazilian-ecommerce)
+currency: BRL
+kpis:
+- id: KPI_GMV
+  name: Gross Merchandise Value
+  status: SUPPORTED
+  definition: Sum of item price over all order lines of orders in scope (all statuses). EXCLUDES freight. GMV is NOT recognized revenue (no invoicing/revenue-recognition, refunds, tax or returns ledger
+    in Olist).
+  formula: SUM(fct_order_items.item_price)
+  numerator: —
+  denominator: —
+  unit: BRL
+  source:
+  - olist_order_items.price
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: &id001
+  - dim_date
+  - dim_customer
+  - dim_product
+  - dim_seller
+  - dim_geography
+  grain: order line (order_id, order_item_id)
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - GMV must never be named or labelled 'Revenue' in any model, measure or visual
+  - GMV >= KPI_NET_GMV for every period
+  - sum(fct_order_items.item_price) == sum(stg_olist__order_items.item_price) (tolerance 0)
+  - freight excluded; see KPI_GMV_INCL_FREIGHT
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items.item_price
+    sql: dbt_enterprise360/analyses/kpi_gmv.sql (reconciliation reference only)
+    power_bi_dax: '[GMV]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_GMV_INCL_FREIGHT
+  name: GMV incl. Freight
+  status: SUPPORTED
+  definition: Item price + customer-charged freight. Not revenue.
+  formula: SUM(item_price + freight_value)
+  numerator: —
+  denominator: —
+  unit: BRL
+  source:
+  - olist_order_items.price
+  - olist_order_items.freight_value
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: *id001
+  grain: order line
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - == KPI_GMV + KPI_FREIGHT (tolerance 0.00)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items
+    sql: dbt_enterprise360/analyses/kpi_gmv_incl_freight.sql (reconciliation reference only)
+    power_bi_dax: '[GMV incl Freight]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_NET_GMV
+  name: Net GMV (excl. canceled/unavailable)
+  status: SUPPORTED
+  definition: GMV of orders whose status is not canceled/unavailable. Operational proxy; NOT net revenue (no returns/refund data).
+  formula: SUM(item_price) WHERE order_status NOT IN ('canceled','unavailable')
+  numerator: —
+  denominator: —
+  unit: BRL
+  source:
+  - olist_order_items.price
+  - olist_orders.order_status
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  - fct_orders
+  dimension_dependencies: *id001
+  grain: order line
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - <= KPI_GMV
+  - label must say 'Net GMV' not 'Net Revenue'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items + fct_orders.is_canceled
+    sql: dbt_enterprise360/analyses/kpi_net_gmv.sql (reconciliation reference only)
+    power_bi_dax: '[Net GMV]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_FREIGHT
+  name: Freight Value
+  status: SUPPORTED
+  definition: Freight charged to customers on order lines (customer-paid; NOT carrier/logistics cost).
+  formula: SUM(freight_value)
+  numerator: —
+  denominator: —
+  unit: BRL
+  source:
+  - olist_order_items.freight_value
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: *id001
+  grain: order line
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - freight_value >= 0
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items.freight_value
+    sql: dbt_enterprise360/analyses/kpi_freight.sql (reconciliation reference only)
+    power_bi_dax: '[Freight Value]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_FREIGHT_SHARE
+  name: Freight Share of GMV
+  status: SUPPORTED
+  definition: Freight as a share of item GMV.
+  formula: KPI_FREIGHT / KPI_GMV
+  numerator: KPI_FREIGHT
+  denominator: KPI_GMV
+  unit: ratio
+  source:
+  - olist_order_items
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: *id001
+  grain: order line (ratio of sums)
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - ratio of sums; never average of line ratios
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items
+    sql: dbt_enterprise360/analyses/kpi_freight_share.sql (reconciliation reference only)
+    power_bi_dax: '[Freight Share %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_PAYMENT_VALUE
+  name: Payment Value
+  status: SUPPORTED
+  definition: Sum of recorded payment values (all payment types incl. vouchers). Transaction value ≠ cash flow ≠ revenue.
+  formula: SUM(fct_payments.payment_value)
+  numerator: —
+  denominator: —
+  unit: BRL
+  source:
+  - olist_order_payments.payment_value
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_payments
+  dimension_dependencies:
+  - dim_date
+  - dim_payment_type
+  grain: payment (order_id, payment_sequential)
+  refresh: daily batch after ingestion + dbt build
+  owner: Finance
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - fct_payments never joined to fct_order_items (fan-out)
+  - 'Per order: |sum(payment_value) − sum(item_price+freight_value)| <= 0.01 BRL else flagged (warn) — known exceptions: orders with payments but no items, vouchers, installment interest; exceptions counted
+    in dq_results, not failed'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_payments.payment_value
+    sql: dbt_enterprise360/analyses/kpi_payment_value.sql (reconciliation reference only)
+    power_bi_dax: '[Payment Value]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_ORDERS
+  name: Orders
+  status: SUPPORTED
+  definition: Distinct orders placed (all statuses).
+  formula: COUNT(DISTINCT order_id)
+  numerator: —
+  denominator: —
+  unit: count
+  source:
+  - olist_orders.order_id
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies: *id001
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - order_id unique in fct_orders
+  - count == distinct order_id in stg_olist__orders (tolerance 0)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_orders
+    sql: dbt_enterprise360/analyses/kpi_orders.sql (reconciliation reference only)
+    power_bi_dax: '[Orders]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_AOV
+  name: Average Order Value
+  status: SUPPORTED
+  definition: Item GMV per order that has at least one item.
+  formula: KPI_GMV / COUNT(DISTINCT order_id with items)
+  numerator: KPI_GMV
+  denominator: orders with ≥1 item
+  unit: BRL
+  source:
+  - olist_order_items
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: *id001
+  grain: order (non-additive)
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - ratio of sums; never average of AOVs
+  - denominator excludes orders with no items (e.g. some canceled/unavailable)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items
+    sql: dbt_enterprise360/analyses/kpi_aov.sql (reconciliation reference only)
+    power_bi_dax: '[AOV]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_ITEMS_PER_ORDER
+  name: Items per Order
+  status: SUPPORTED
+  definition: Average order lines (=units; one row per unit in Olist) per order with items.
+  formula: COUNT(order lines)/COUNT(DISTINCT order_id)
+  numerator: order lines
+  denominator: orders with items
+  unit: ratio
+  source:
+  - olist_order_items
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies: *id001
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - '>= 1'
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items
+    sql: dbt_enterprise360/analyses/kpi_items_per_order.sql (reconciliation reference only)
+    power_bi_dax: '[Items per Order]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_CANCEL_RATE
+  name: Cancellation Rate
+  status: SUPPORTED
+  definition: Share of orders with status canceled or unavailable.
+  formula: orders(status in canceled,unavailable)/KPI_ORDERS
+  numerator: canceled+unavailable orders
+  denominator: KPI_ORDERS
+  unit: percent
+  source:
+  - olist_orders.order_status
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_date
+  - dim_customer
+  - dim_geography
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 0..1
+  - order_status accepted_values test passes
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_orders.is_canceled
+    sql: dbt_enterprise360/analyses/kpi_cancel_rate.sql (reconciliation reference only)
+    power_bi_dax: '[Cancellation Rate %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_ACTIVE_CUSTOMERS
+  name: Active Customers
+  status: SUPPORTED
+  definition: Distinct real customers (customer_unique_id) with ≥1 order in period.
+  formula: COUNT(DISTINCT customer_unique_id)
+  numerator: —
+  denominator: —
+  unit: count
+  source:
+  - olist_customers.customer_unique_id
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_customer
+  - dim_date
+  grain: customer × period (non-additive)
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CRM
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - must use customer_unique_id, NOT customer_id (customer_id is per order)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_orders.customer_sk
+    sql: dbt_enterprise360/analyses/kpi_active_customers.sql (reconciliation reference only)
+    power_bi_dax: '[Active Customers]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_NEW_CUSTOMERS
+  name: New Customers
+  status: SUPPORTED
+  definition: Customers whose first-ever order falls in the period.
+  formula: COUNT(DISTINCT customer_unique_id WHERE first_order_date in period)
+  numerator: —
+  denominator: —
+  unit: count
+  source:
+  - olist_customers
+  - olist_orders
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_customer
+  - dim_date
+  grain: customer × period
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CRM
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - new + returning = active
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: dim_customer.first_order_date
+    sql: dbt_enterprise360/analyses/kpi_new_customers.sql (reconciliation reference only)
+    power_bi_dax: '[New Customers]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_REPEAT_RATE
+  name: Repeat Purchase Rate
+  status: SUPPORTED
+  definition: Share of customers (customer_unique_id) with ≥2 distinct orders within the selected period; customers with exactly one in-period order count in the denominator even if they ordered outside the period. Visuals must label it 'within selected period' (lifetime repeat rate = full coverage selected).
+  formula: customers with ≥2 orders / customers
+  numerator: repeat customers
+  denominator: customers
+  unit: percent
+  source:
+  - olist_customers
+  - olist_orders
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_customer
+  grain: customer
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CRM
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - report numerator & denominator with rate (low base expected; report as observed)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: dim_customer.lifetime_orders
+    sql: dbt_enterprise360/analyses/kpi_repeat_rate.sql (reconciliation reference only)
+    power_bi_dax: '[Repeat Purchase Rate %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_OTD_RATE
+  name: On-Time Delivery Rate
+  status: SUPPORTED
+  definition: Share of OTD-eligible orders (fct_deliveries.is_otd_eligible = status delivered AND delivered_customer_at not null AND delivered_customer_at >= purchased_at) whose delivered_customer_at date <= estimated_delivery_at date. Default date role is purchase date; [On-Time Delivery % (by Delivery Date)] is the same KPI on the delivery-date role.
+  formula: count(is_otd_eligible AND is_on_time) / count(is_otd_eligible)
+  numerator: on-time orders
+  denominator: OTD-eligible orders
+  unit: percent
+  source:
+  - olist_orders delivery timestamps
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_deliveries
+  dimension_dependencies:
+  - dim_date
+  - dim_seller
+  - dim_geography
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - exclude delivered orders missing delivered_customer_at (counted as DQ)
+  - estimate is Olist's estimate, not a contractual SLA
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_deliveries.is_on_time
+    sql: dbt_enterprise360/analyses/kpi_otd_rate.sql (reconciliation reference only)
+    power_bi_dax: '[On-Time Delivery %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_DELIVERY_DAYS
+  name: Average Delivery Days
+  status: SUPPORTED
+  definition: Mean days from purchase to customer delivery.
+  formula: AVG(delivered_customer_at − purchased_at in days)
+  numerator: Σ days
+  denominator: delivered orders
+  unit: days
+  source:
+  - olist_orders timestamps
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_deliveries
+  dimension_dependencies:
+  - dim_date
+  - dim_seller
+  - dim_geography
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - delivered_customer_at >= purchased_at else flagged & excluded
+  - timestamps local, no TZ (ASSUMPTION)
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_deliveries.delivery_days
+    sql: dbt_enterprise360/analyses/kpi_delivery_days.sql (reconciliation reference only)
+    power_bi_dax: '[Avg Delivery Days]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_APPROVAL_HOURS
+  name: Order Approval Time
+  status: SUPPORTED
+  definition: Mean hours purchase → payment approval.
+  formula: AVG(approved_at − purchased_at)
+  numerator: Σ hours
+  denominator: approved orders
+  unit: hours
+  source:
+  - olist_orders.order_approved_at
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_date
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - approved_at >= purchased_at
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_orders.hours_to_approve
+    sql: dbt_enterprise360/analyses/kpi_approval_hours.sql (reconciliation reference only)
+    power_bi_dax: '[Avg Approval Hours]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_REVIEW_SCORE
+  name: Average Review Score
+  status: SUPPORTED
+  definition: Mean review score (1–5) using latest review per order. Proxy for satisfaction; not surveyed CSAT.
+  formula: AVG(review_score) over int_olist__order_review_latest
+  numerator: Σ score
+  denominator: orders reviewed
+  unit: score
+  source:
+  - olist_order_reviews.review_score
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_reviews
+  dimension_dependencies:
+  - dim_date
+  - dim_seller
+  - dim_product
+  grain: order (latest review)
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CX
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - score in 1..5
+  - one review per order in KPI basis
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: int_olist__order_review_latest
+    sql: dbt_enterprise360/analyses/kpi_review_score.sql (reconciliation reference only)
+    power_bi_dax: '[Avg Review Score]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_LOW_REVIEW_RATE
+  name: Low Review Share
+  status: SUPPORTED
+  definition: Share of reviewed orders scoring 1–2 (proxy for complaints).
+  formula: orders score<=2 / orders reviewed
+  numerator: low-score orders
+  denominator: reviewed orders
+  unit: percent
+  source:
+  - olist_order_reviews
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_reviews
+  dimension_dependencies:
+  - dim_date
+  - dim_seller
+  - dim_product
+  grain: order
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CX
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - 0..1
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: int_olist__order_review_latest
+    sql: dbt_enterprise360/analyses/kpi_low_review_rate.sql (reconciliation reference only)
+    power_bi_dax: '[Low Review %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_GMV_GROWTH
+  name: GMV Growth %
+  status: PARTIAL
+  definition: 'Month-over-month change in KPI_GMV (calendar month, purchase date). Named GMV growth, not revenue growth. PARTIAL: first/last coverage months are partial and sparse; return blank when either month is partial or prior GMV is 0.'
+  formula: (GMV_t − GMV_t−1)/GMV_t−1
+  numerator: ΔGMV
+  denominator: GMV prior period
+  unit: percent
+  source:
+  - olist_order_items
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_order_items
+  dimension_dependencies:
+  - dim_date
+  grain: month
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Sales
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - suppress periods flagged partial in dim_date coverage
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_order_items
+    sql: dbt_enterprise360/analyses/kpi_gmv_growth.sql (reconciliation reference only)
+    power_bi_dax: '[GMV Growth %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_CUSTOMER_RETENTION
+  name: Customer Retention Rate
+  status: PARTIAL
+  definition: 'Share of customers (customer_unique_id) active in the previous calendar month who order again in the current month. PARTIAL: very low repeat base makes it statistically unstable; show alongside [Retention Cohort Size].'
+  formula: retained / prior active
+  numerator: retained
+  denominator: prior-period active
+  unit: percent
+  source:
+  - olist_customers
+  - olist_orders
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - fct_orders
+  dimension_dependencies:
+  - dim_customer
+  - dim_date
+  grain: cohort × period
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of CRM
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - show cohort size
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: fct_orders
+    sql: dbt_enterprise360/analyses/kpi_customer_retention.sql (reconciliation reference only)
+    power_bi_dax: '[Customer Retention %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_DQ_SCORE
+  name: Data Quality Score
+  status: SUPPORTED
+  definition: Severity-weighted pass share of DQ checks per run.
+  formula: Σ(pass×weight)/Σ(weight)
+  numerator: weighted passes
+  denominator: weighted checks
+  unit: percent
+  source:
+  - core.dq_results
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - core.dq_results
+  dimension_dependencies:
+  - dim_date
+  grain: check × run
+  refresh: daily batch after ingestion + dbt build
+  owner: Data Platform Lead
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - weights per 16 DQ framework
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: core.dq_results
+    sql: dbt_enterprise360/analyses/kpi_dq_score.sql (reconciliation reference only)
+    power_bi_dax: '[DQ Score %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_RECON_VARIANCE
+  name: Reconciliation Variance
+  status: SUPPORTED
+  definition: Difference of key KPIs between staging/source and marts/BI.
+  formula: mart_value − source_value
+  numerator: —
+  denominator: —
+  unit: BRL/count
+  source:
+  - core.dq_results
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT from CSV headers; dbt names per 05 STTM, ASSUMPTION until models exist)
+  fact_dependencies:
+  - core.dq_results
+  dimension_dependencies:
+  - dim_date
+  grain: kpi × run
+  refresh: daily batch after ingestion + dbt build
+  owner: Data Platform Lead
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - counts tolerance 0; amounts 0.01 BRL
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Olist-only scope; initial authoritative definition
+    pr: TBD
+  implementations:
+    dbt: core.dq_results
+    sql: dbt_enterprise360/analyses/kpi_recon_variance.sql (reconciliation reference only)
+    power_bi_dax: '[Reconciliation Variance]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation
+- id: KPI_SELLER_HANDOVER_OTD
+  name: Seller Handover On-Time Rate
+  status: PARTIAL
+  definition: 'Share of order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item''s fct_order_items.shipping_limit_at, counting only items with both timestamps. PARTIAL: Olist records the carrier handover once per order, so every seller in a multi-seller order is measured against the same handover time.'
+  formula: count(items where delivered_carrier_at <= shipping_limit_at) / count(items with both timestamps)
+  numerator: items handed over on time
+  denominator: items with both delivered_carrier_at and shipping_limit_at
+  unit: percent
+  source:
+  - olist_order_items.shipping_limit_date
+  - olist_orders.order_delivered_carrier_date
+  source_tag: PROPOSED (Olist columns CONFIRMED FACT; dbt names confirmed in fct_order_items and fct_deliveries)
+  fact_dependencies:
+  - fct_order_items
+  - fct_deliveries
+  dimension_dependencies:
+  - dim_date
+  - dim_seller
+  - dim_product
+  grain: order item
+  refresh: daily batch after ingestion + dbt build
+  owner: Head of Operations
+  target: to be set by owner
+  benchmark: to be set by owner
+  validation_rules:
+  - exclude items missing either timestamp (count separately as DQ)
+  - flag multi-seller orders; seller-level values for them share one order-level handover time
+  - shipping_limit_at is Olist's seller deadline, not a contractual SLA
+  - timestamp comparison, not date-only
+  version: 1.0.0
+  change_log:
+  - version: 1.0.0
+    date: '2026-10-30'
+    author: KPI & Quality
+    change: Added at Power BI's request as an item-grain seller handover measure
+    pr: TBD
+  implementations:
+    dbt: fct_order_items.shipping_limit_at joined to fct_deliveries.delivered_carrier_at on order_id (no fan-out, deliveries is one row per order)
+    sql: dbt_enterprise360/analyses/kpi_seller_handover_otd.sql (reconciliation reference only)
+    power_bi_dax: '[Seller Handover On-Time %]'
+    streamlit: app/services/kpis.py → reads dbt mart; no recomputation

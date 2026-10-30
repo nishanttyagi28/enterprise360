@@ -1,0 +1,59 @@
+/// Fact at payment grain (order_id, payment_sequential). Transaction value, NOT sales and NOT cash flow. Never related to Order Item.
+table Payment
+	lineageTag: bcce4495-0b49-5dc5-a5de-2772c120fd6d
+
+	column order_id
+		dataType: string
+		isHidden
+		lineageTag: 9225a453-7af8-5364-98c4-72faab30dcec
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = User
+
+	column payment_sequential
+		dataType: int64
+		isHidden
+		lineageTag: 073b013f-2596-5856-ab3d-f989fcf7a819
+		summarizeBy: none
+		sourceColumn: payment_sequential
+
+		annotation SummarizationSetBy = User
+
+	column 'Payment Type'
+		dataType: string
+		lineageTag: 8f59ac7a-4fa1-5482-b177-4080c29490ec
+		summarizeBy: none
+		sourceColumn: payment_type
+
+		annotation SummarizationSetBy = User
+
+	column 'Payment Installments'
+		dataType: int64
+		lineageTag: f313e31c-f53c-5caf-8cf1-74727f4a7f04
+		summarizeBy: none
+		sourceColumn: payment_installments
+
+		annotation SummarizationSetBy = User
+
+	column payment_value
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: ddf30030-713d-5eb5-9ba3-5c9a24922e74
+		summarizeBy: sum
+		sourceColumn: payment_value
+
+		annotation SummarizationSetBy = User
+
+	partition Payment = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_payments"]}[Data],
+					Selected = Table.SelectColumns(Data, {"order_id", "payment_sequential", "payment_type", "payment_installments", "payment_value"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

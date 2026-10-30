@@ -1,0 +1,106 @@
+/// Fact at order grain for fulfilment. Estimated date is Olist's customer estimate, not a contractual SLA.
+table Delivery
+	lineageTag: 0fbaaec9-31a9-5a60-a15c-bba2eda81c2b
+
+	column order_id
+		dataType: string
+		isHidden
+		lineageTag: 2a2457ae-aae9-5c17-9cf6-bbdaa9c6b1fb
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = User
+
+	column delivered_date_key
+		dataType: int64
+		isHidden
+		lineageTag: 5b12bcae-9631-500d-9c37-f41b588e8096
+		summarizeBy: none
+		sourceColumn: delivered_date_key
+
+		annotation SummarizationSetBy = User
+
+	column 'Delivered At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: 44a9aae8-8dc2-5ac8-a5a5-d006fc142b60
+		summarizeBy: none
+		sourceColumn: delivered_customer_at
+
+		annotation SummarizationSetBy = User
+
+	column 'Estimated Delivery At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: a81cac7f-372b-510d-b25f-892dbfe661ea
+		summarizeBy: none
+		sourceColumn: estimated_delivery_at
+
+		annotation SummarizationSetBy = User
+
+	column 'Carrier Handover At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: ab9ac58e-3c24-53a5-a59c-eff464b29901
+		summarizeBy: none
+		sourceColumn: delivered_carrier_at
+
+		annotation SummarizationSetBy = User
+
+	column is_on_time
+		dataType: boolean
+		isHidden
+		lineageTag: f149b063-7a38-5cfe-8319-37df7e1afe93
+		summarizeBy: none
+		sourceColumn: is_on_time
+
+		annotation SummarizationSetBy = User
+
+	column is_otd_eligible
+		dataType: boolean
+		isHidden
+		lineageTag: e034eed4-f2e2-5fe1-8d25-2eb513f51ec8
+		summarizeBy: none
+		sourceColumn: is_otd_eligible
+
+		annotation SummarizationSetBy = User
+
+	column delivery_days
+		dataType: double
+		isHidden
+		formatString: #,0.0
+		lineageTag: 5cdd72ca-460c-53e2-a83d-80ef210df733
+		summarizeBy: none
+		sourceColumn: delivery_days
+
+		annotation SummarizationSetBy = User
+
+	column dq_missing_delivery_ts
+		dataType: boolean
+		isHidden
+		lineageTag: 05d3ae39-4766-51c8-93d0-33232021a3ca
+		summarizeBy: none
+		sourceColumn: dq_missing_delivery_ts
+
+		annotation SummarizationSetBy = User
+
+	column dq_delivered_before_purchase
+		dataType: boolean
+		isHidden
+		lineageTag: 50baab6c-c9fd-5f43-bdf5-3b8ee3f1b43e
+		summarizeBy: none
+		sourceColumn: dq_delivered_before_purchase
+
+		annotation SummarizationSetBy = User
+
+	partition Delivery = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_deliveries"]}[Data],
+					Selected = Table.SelectColumns(Data, {"order_id", "delivered_date_key", "delivered_customer_at", "estimated_delivery_at", "delivered_carrier_at", "is_on_time", "is_otd_eligible", "delivery_days", "dq_missing_delivery_ts", "dq_delivered_before_purchase"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

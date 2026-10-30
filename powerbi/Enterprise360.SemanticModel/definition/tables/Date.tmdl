@@ -1,0 +1,101 @@
+/// Warehouse calendar core.dim_date (spine 2016-01-01..2019-12-31). Marked as date table on Date.
+table Date
+	lineageTag: 32950b3a-273a-52ea-bbe0-dd7c996468ec
+	dataCategory: Time
+
+	column date_key
+		dataType: int64
+		isHidden
+		lineageTag: 9c307ec9-4a50-5a28-8556-f91635f51c40
+		summarizeBy: none
+		sourceColumn: date_key
+
+		annotation SummarizationSetBy = User
+
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		lineageTag: 9f518c7b-de58-50fb-a65e-fcc5ea283137
+		summarizeBy: none
+		sourceColumn: date_day
+
+		annotation SummarizationSetBy = User
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: d5f451e7-88fa-5411-a653-2f38db673edd
+		summarizeBy: none
+		sourceColumn: year
+
+		annotation SummarizationSetBy = User
+
+	column Quarter
+		dataType: int64
+		formatString: 0
+		lineageTag: c24e608d-15fd-5905-8af7-49b9bdd02fc7
+		summarizeBy: none
+		sourceColumn: quarter
+
+		annotation SummarizationSetBy = User
+
+	column 'Month No'
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 9f5fee1e-3630-5b5c-a16b-51e8e386eda1
+		summarizeBy: none
+		sourceColumn: month
+
+		annotation SummarizationSetBy = User
+
+	column Month
+		dataType: string
+		lineageTag: b150d6e1-149b-5b86-b648-d3f75267617e
+		summarizeBy: none
+		sourceColumn: month_name
+		sortByColumn: 'Month No'
+
+		annotation SummarizationSetBy = User
+
+	column 'Month Start'
+		dataType: dateTime
+		isHidden
+		formatString: yyyy-mm-dd
+		lineageTag: 1ab4652e-adcf-5dd5-b896-25b88eb5ef6a
+		summarizeBy: none
+		sourceColumn: month_start
+
+		annotation SummarizationSetBy = User
+
+	column 'Year Month'
+		dataType: string
+		lineageTag: 176c050d-11f2-51e8-9cc1-37bb44758e28
+		summarizeBy: none
+		sourceColumn: year_month
+		sortByColumn: 'Month Start'
+
+		annotation SummarizationSetBy = User
+
+	column is_complete_month
+		dataType: boolean
+		isHidden
+		lineageTag: 55234f07-5f84-5fb6-bb9c-406b35aa55b5
+		summarizeBy: none
+		sourceColumn: is_complete_month
+
+		annotation SummarizationSetBy = User
+
+	partition Date = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "dim_date"]}[Data],
+					Selected = Table.SelectColumns(Data, {"date_key", "date_day", "year", "quarter", "month", "month_name", "month_start", "year_month", "is_complete_month"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"date_day", type date}, {"month_start", type date}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

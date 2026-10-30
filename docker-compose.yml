@@ -1,0 +1,21 @@
+# OPTIONAL. The target runtime (Windows laptop) uses a native PostgreSQL 16 service, not Docker.
+# Provided for contributors who prefer a container. Credentials come from .env.
+services:
+  postgres:
+    image: postgres:16
+    container_name: e360-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-enterprise360}
+      POSTGRES_USER: ${POSTGRES_USER:-e360_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - e360_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  e360_pgdata:

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.0.0/schema.json",
+  "displayName": "Detail view",
+  "name": "571aea7dded25e599faf",
+  "options": {
+    "targetVisualNames": [
+      "875708ba6b65513aa942",
+      "1dddba3219ec55079606",
+      "0392bfa469ae5fa4a869",
+      "8ee10a96056b526d8587",
+      "d41414730131581f9410"
+    ],
+    "applyOnlyToTargetVisuals": true,
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.3",
+    "activeSection": "5dbc4bb196755005b719",
+    "sections": {
+      "5dbc4bb196755005b719": {
+        "visualContainers": {
+          "875708ba6b65513aa942": {
+            "singleVisual": {
+              "visualType": "tableEx"
+            }
+          },
+          "1dddba3219ec55079606": {
+            "singleVisual": {
+              "visualType": "lineChart",
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "0392bfa469ae5fa4a869": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "8ee10a96056b526d8587": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart",
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          },
+          "d41414730131581f9410": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart",
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

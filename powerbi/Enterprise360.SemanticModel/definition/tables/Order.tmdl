@@ -1,0 +1,96 @@
+/// Fact at order grain (order_id). Carries customer, status and purchase date; filters Order Item, Payment, Review and Delivery.
+table Order
+	lineageTag: cf54af9b-c933-5ecd-876e-967e71825e5d
+
+	column 'Order ID'
+		dataType: string
+		lineageTag: a121e0dd-c22f-54fc-a462-db595fdc9e3d
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = User
+
+	column customer_sk
+		dataType: string
+		isHidden
+		lineageTag: f8ab5591-922d-5651-b46e-29bb8e75a992
+		summarizeBy: none
+		sourceColumn: customer_sk
+
+		annotation SummarizationSetBy = User
+
+	column order_status
+		dataType: string
+		isHidden
+		lineageTag: 25844dac-8a87-5f7e-acf2-f1efe226a59b
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = User
+
+	column purchase_date_key
+		dataType: int64
+		isHidden
+		lineageTag: 2cbf42be-0804-5833-893c-86c187e7b5ba
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+		annotation SummarizationSetBy = User
+
+	column 'Purchased At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: 077da266-6927-5bed-95c2-8de27bfc82fe
+		summarizeBy: none
+		sourceColumn: purchased_at
+
+		annotation SummarizationSetBy = User
+
+	column 'Approved At'
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: dafb49c8-04e0-5519-a5e5-ea7da29c2015
+		summarizeBy: none
+		sourceColumn: approved_at
+
+		annotation SummarizationSetBy = User
+
+	column hours_to_approve
+		dataType: double
+		isHidden
+		formatString: #,0.0
+		lineageTag: eb568d10-9a41-5e5b-87c7-669125e8c9e2
+		summarizeBy: none
+		sourceColumn: hours_to_approve
+
+		annotation SummarizationSetBy = User
+
+	column 'Review Score'
+		dataType: int64
+		lineageTag: a7a7cd07-de03-51f6-8490-b7651cae51ab
+		summarizeBy: none
+		sourceColumn: latest_review_score
+
+		annotation SummarizationSetBy = User
+
+	column payment_vs_items_diff
+		dataType: decimal
+		isHidden
+		formatString: #,0.00
+		lineageTag: 322d19da-fbc4-5812-afbd-e45ec771603f
+		summarizeBy: none
+		sourceColumn: payment_vs_items_diff
+
+		annotation SummarizationSetBy = User
+
+	partition Order = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_orders"]}[Data],
+					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff"})
+				in
+					Selected
+
+	annotation PBI_ResultType = Table

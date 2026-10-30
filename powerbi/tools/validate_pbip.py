@@ -1,0 +1,251 @@
+"""Validate the PBIP: JSON files against their $schema, and report/model cross-references.
+
+Usage: python tools/validate_pbip.py [--schemas <local clone of microsoft/json-schemas>] [--model-json <TOM json>]
+Without --schemas, schemas are downloaded from developer.microsoft.com / GitHub.
+TMDL syntax is validated separately with the TOM TmdlSerializer (see README).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+from jsonschema import Draft7Validator
+from referencing import Registry, Resource
+
+ROOT = Path(__file__).resolve().parents[1]
+MS_PREFIX = "https://developer.microsoft.com/json-schemas/"
+
+
+def make_retriever(local: Path | None):
+    cache: dict[str, dict] = {}
+
+    def retrieve(uri: str):
+        if uri not in cache:
+            if local and uri.startswith(MS_PREFIX):
+                cache[uri] = json.loads((local / uri[len(MS_PREFIX):]).read_text(encoding="utf-8"))
+            else:
+                with urllib.request.urlopen(uri, timeout=60) as r:
+                    cache[uri] = json.loads(r.read().decode("utf-8"))
+        return Resource.from_contents(cache[uri], default_specification=__import__("referencing.jsonschema").jsonschema.DRAFT7)
+
+    return retrieve
+
+
+def validate_json(local: Path | None) -> int:
+    retrieve = make_retriever(local)
+    registry = Registry(retrieve=retrieve)
+    errors = 0
+    files = sorted(list(ROOT.rglob("*.json")) + list(ROOT.rglob("*.pbir")) + list(ROOT.rglob("*.pbism")) + list(ROOT.glob("*.pbip")))
+    for f in files:
+        if ".pbi" in f.parts or "tools" in f.parts:
+            continue
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        uri = doc.get("$schema")
+        if not uri:
+            print(f"FAIL {f.relative_to(ROOT)}: no $schema"); errors += 1; continue
+        schema = retrieve(uri).contents
+        v = Draft7Validator(schema, registry=registry)
+        errs = sorted(v.iter_errors(doc), key=lambda e: list(e.path))
+        status = "OK  " if not errs else "FAIL"
+        print(f"{status} {f.relative_to(ROOT)}  [{uri.rsplit('/', 3)[-3]}/{uri.rsplit('/', 2)[-2]}]")
+        for e in errs[:10]:
+            print("      ", list(e.path), e.message[:300])
+        errors += len(errs)
+    return errors
+
+
+def walk_fields(obj, out):
+    if isinstance(obj, dict):
+        for k in ("Measure", "Column"):
+            if k in obj and isinstance(obj[k], dict) and "Property" in obj[k]:
+                out.append((k, obj[k]["Expression"]["SourceRef"]["Entity"], obj[k]["Property"]))
+        for v in obj.values():
+            walk_fields(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            walk_fields(v, out)
+
+
+def cross_refs(model_json: Path) -> int:
+    m = json.loads(model_json.read_text(encoding="utf-8"))["model"]
+    cols = {(t["name"], c["name"]) for t in m["tables"] for c in t.get("columns", [])}
+    meas = {(t["name"], x["name"]) for t in m["tables"] for x in t.get("measures", [])}
+    hidden = {(t["name"], c["name"]) for t in m["tables"] for c in t.get("columns", []) if c.get("isHidden")}
+    errors = 0
+    for r in m.get("relationships", []):
+        for side in ("from", "to"):
+            if (r[f"{side}Table"], r[f"{side}Column"]) not in cols:
+                print(f"FAIL relationship {r['name']}: missing {r[side + 'Table']}[{r[side + 'Column']}]"); errors += 1
+    for t in m["tables"]:
+        for c in t.get("columns", []):
+            if c.get("sortByColumn") and (t["name"], c["sortByColumn"]) not in cols:
+                print(f"FAIL sortByColumn {t['name']}[{c['name']}]"); errors += 1
+    names = {n for _, n in meas}
+    colnames = {f"'{t}'[{c}]" for t, c in cols}
+    for t, n in sorted(meas):
+        expr = next(x["expression"] for tt in m["tables"] if tt["name"] == t for x in tt["measures"] if x["name"] == n)
+        expr = expr if isinstance(expr, str) else "\n".join(expr)
+        for ref in re.findall(r"'([^']+)'\[([^\]]+)\]", expr):
+            if ref not in cols:
+                print(f"FAIL measure [{n}] references missing column '{ref[0]}'[{ref[1]}]"); errors += 1
+        for ref in re.findall(r"(?<!')\[([^\]]+)\]", re.sub(r"'[^']+'\[[^\]]+\]", "", expr)):
+            if ref not in names:
+                print(f"FAIL measure [{n}] references missing measure [{ref}]"); errors += 1
+    tables = {t["name"] for t in m["tables"]}
+    for r in m.get("roles", []):
+        for tp in r.get("tablePermissions", []):
+            if tp["name"] not in tables:
+                print(f"FAIL role {r['name']}: table {tp['name']} missing"); errors += 1
+            for col in re.findall(r"\[([^\]]+)\]", tp.get("filterExpression", "")):
+                if (tp["name"], col) not in cols:
+                    print(f"FAIL role {r['name']}: column {tp['name']}[{col}] missing"); errors += 1
+    print(f"roles: {[r['name'] for r in m.get('roles', [])]}")
+    errors += report_refs()
+    errors += rls_safety(m)
+    n_vis = 0
+    for vf in sorted((ROOT / "Enterprise360.Report").rglob("visual.json")):
+        n_vis += 1
+        refs: list = []
+        walk_fields(json.loads(vf.read_text(encoding="utf-8")), refs)
+        for kind, ent, prop in refs:
+            ok = (ent, prop) in (meas if kind == "Measure" else cols)
+            if not ok:
+                print(f"FAIL {vf.parent.name}: {kind} {ent}.{prop} not in model"); errors += 1
+            elif kind == "Column" and (ent, prop) in hidden:
+                print(f"WARN {vf.parent.name}: hidden column {ent}.{prop} used")
+    print(f"cross-reference: {len(m['relationships'])} relationships, {len(meas)} measures, {n_vis} visuals checked, {errors} errors")
+    return errors
+
+
+FORBIDDEN = [
+    (re.compile(r"CROSSFILTER\s*\([^)]*,\s*NONE\s*\)", re.I), "CROSSFILTER(..., NONE) breaks RLS/slicer propagation"),
+    (re.compile(r"\b(ALL|ALLEXCEPT|ALLNOBLANKROW|ALLSELECTED|REMOVEFILTERS)\s*\(\s*'?(Geography|Customer|Order)'?\s*[\)\[,]", re.I),
+     "ALL/REMOVEFILTERS on Geography/Customer/Order removes RLS-propagating filters"),
+]
+
+
+def rls_safety(m: dict) -> int:
+    """No measure, calc item or calculated column may cut the Geography -> Customer -> Order path."""
+    errors = 0
+    exprs = []
+    for t in m["tables"]:
+        for x in t.get("measures", []):
+            exprs.append((f"measure [{x['name']}]", x["expression"]))
+        for c in t.get("columns", []):
+            if c.get("type") == "calculated":
+                exprs.append((f"column {t['name']}[{c['name']}]", c["expression"]))
+        for ci in t.get("calculationGroup", {}).get("calculationItems", []):
+            exprs.append((f"calc item {ci['name']}", ci["expression"]))
+    for where, e in exprs:
+        e = e if isinstance(e, str) else "\n".join(e)
+        for rx, why in FORBIDDEN:
+            if rx.search(e):
+                print(f"FAIL {where}: {why}"); errors += 1
+    print(f"rls-safety: {len(exprs)} expressions scanned, {errors} violations")
+    return errors
+
+
+def report_refs() -> int:
+    """Pages, drill-through bindings, tooltip assignments, bookmark targets and button links."""
+    errors = 0
+    rdef = ROOT / "Enterprise360.Report" / "definition"
+    pages = {}
+    for pj in (rdef / "pages").glob("*/page.json"):
+        pg = json.loads(pj.read_text(encoding="utf-8"))
+        vis = {}
+        for vf in (pj.parent / "visuals").glob("*/visual.json"):
+            v = json.loads(vf.read_text(encoding="utf-8"))
+            if v["name"] != vf.parent.name:
+                print(f"FAIL visual folder/name mismatch {vf}"); errors += 1
+            vis[v["name"]] = v
+        if pg["name"] != pj.parent.name:
+            print(f"FAIL page folder/name mismatch {pj}"); errors += 1
+        pages[pg["name"]] = (pg, vis)
+    meta = json.loads((rdef / "pages" / "pages.json").read_text(encoding="utf-8"))
+    if set(meta["pageOrder"]) != set(pages):
+        print("FAIL pages.json pageOrder does not match page folders"); errors += 1
+    bm_names = set()
+    bdir = rdef / "bookmarks"
+    if bdir.exists():
+        bmeta = json.loads((bdir / "bookmarks.json").read_text(encoding="utf-8"))
+        for bf in bdir.glob("*.bookmark.json"):
+            b = json.loads(bf.read_text(encoding="utf-8"))
+            bm_names.add(b["name"])
+            if bf.name != f"{b['name']}.bookmark.json":
+                print(f"FAIL bookmark file name {bf.name}"); errors += 1
+            es = b["explorationState"]
+            if es["activeSection"] not in pages:
+                print(f"FAIL bookmark {b['name']}: activeSection missing"); errors += 1
+            for sec, st in es["sections"].items():
+                for vn, vs in st["visualContainers"].items():
+                    if sec not in pages or vn not in pages[sec][1]:
+                        print(f"FAIL bookmark {b['name']}: visual {vn} missing"); errors += 1
+                    elif vs["singleVisual"]["visualType"] != pages[sec][1][vn]["visual"]["visualType"]:
+                        print(f"FAIL bookmark {b['name']}: visualType mismatch {vn}"); errors += 1
+            for vn in b.get("options", {}).get("targetVisualNames", []):
+                if not any(vn in p[1] for p in pages.values()):
+                    print(f"FAIL bookmark {b['name']}: target {vn} missing"); errors += 1
+        listed = {i["name"] for i in bmeta["items"]} | {c for i in bmeta["items"] for c in i.get("children", [])}
+        if listed != bm_names:
+            print("FAIL bookmarks.json items do not match bookmark files"); errors += 1
+    lit = lambda o: o["expr"]["Literal"]["Value"].strip("'")
+    n_tt = n_dt = n_links = 0
+    for pname, (pg, vis) in pages.items():
+        pb = pg.get("pageBinding")
+        if pg.get("type") == "Drillthrough":
+            n_dt += 1
+            fnames = {f["name"] for f in pg.get("filterConfig", {}).get("filters", [])}
+            for prm in (pb or {}).get("parameters", []):
+                if prm.get("boundFilter") not in fnames:
+                    print(f"FAIL drillthrough {pname}: boundFilter missing"); errors += 1
+            if not pb or pb.get("type") != "Drillthrough":
+                print(f"FAIL drillthrough {pname}: pageBinding"); errors += 1
+        if pg.get("type") == "Tooltip" and (not pb or pb.get("type") != "Tooltip"):
+            print(f"FAIL tooltip {pname}: pageBinding"); errors += 1
+        for vn, v in vis.items():
+            vco = v.get("visual", {}).get("visualContainerObjects", {})
+            for tt in vco.get("visualTooltip", []):
+                sec = lit(tt["properties"]["section"]); n_tt += 1
+                if sec not in pages or pages[sec][0].get("type") != "Tooltip":
+                    print(f"FAIL {vn}: tooltip page {sec} missing / not a Tooltip page"); errors += 1
+            for vl in vco.get("visualLink", []):
+                pr = vl["properties"]; n_links += 1
+                if lit(pr["type"]) == "Bookmark" and lit(pr["bookmark"]) not in bm_names:
+                    print(f"FAIL {vn}: bookmark link target missing"); errors += 1
+    # drill-through usable: every drill field must appear in at least one visual on a non-drill page
+    for pname, (pg, vis) in pages.items():
+        if pg.get("type") != "Drillthrough":
+            continue
+        f = pg["filterConfig"]["filters"][0]["field"]["Column"]
+        key = (f["Expression"]["SourceRef"]["Entity"], f["Property"])
+        sources = []
+        for on, (opg, ovis) in pages.items():
+            if on == pname or opg.get("type") == "Tooltip":
+                continue
+            for vn, v in ovis.items():
+                refs: list = []
+                walk_fields(v.get("visual", {}).get("query", {}), refs)
+                if ("Column",) + key in refs:
+                    sources.append(f"{opg['displayName']}/{vn}")
+        if not sources:
+            print(f"FAIL drillthrough {pg['displayName']}: no source visual uses {key}"); errors += 1
+        else:
+            print(f"drill-through {pg['displayName']} on {key[0]}[{key[1]}]: {len(sources)} source visual(s)")
+    print(f"report: {len(pages)} pages, {n_dt} drill-through, {len(bm_names)} bookmarks, {n_tt} tooltip assignments, {n_links} button links")
+    return errors
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--schemas", type=Path)
+    ap.add_argument("--model-json", type=Path)
+    a = ap.parse_args()
+    e = validate_json(a.schemas)
+    if a.model_json:
+        e += cross_refs(a.model_json)
+    print("TOTAL ERRORS:", e)
+    sys.exit(1 if e else 0)

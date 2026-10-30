@@ -1,0 +1,1070 @@
+"""Generates the Enterprise360 PBIP (TMDL semantic model + PBIR report).
+
+Deterministic: GUID-like ids are derived from names (uuid5), so re-running produces
+identical files and clean git diffs. Edit this script, not the generated files,
+or edit generated files and stop using the script -- pick one (README).
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import uuid
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SM = ROOT / "Enterprise360.SemanticModel"
+RP = ROOT / "Enterprise360.Report"
+NS = uuid.UUID("6f1c7a52-6b8e-4b7c-9a0e-2b1f3e3c0e36")
+MS = "https://developer.microsoft.com/json-schemas/fabric"
+V_VISUAL, V_PAGE, V_REPORT = "2.5.0", "2.0.0", "3.1.0"
+V_BOOKMARK = "2.0.0"
+
+# dim_date completeness flag (TRUE = whole calendar month inside Olist coverage). [GMV Growth %]
+# returns BLANK when the current or prior month is not complete. Set to None to drop the check.
+DATE_COMPLETE_FLAG_COLUMN: str | None = "is_complete_month"
+
+
+def gid(*parts: str) -> str:
+    return str(uuid.uuid5(NS, "|".join(parts)))
+
+
+def hid(*parts: str) -> str:  # 20-char hex names for pages/visuals (PBIR convention)
+    return uuid.uuid5(NS, "|".join(parts)).hex[:20]
+
+
+def q(name: str) -> str:
+    """Quote a TMDL object name when needed."""
+    if name.replace("_", "").isalnum() and not name[0].isdigit():
+        return name
+    return "'" + name.replace("'", "''") + "'"
+
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def wjson(path: Path, obj) -> None:
+    write(path, json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
+
+
+# --------------------------------------------------------------------------------------
+# Semantic model definition
+# --------------------------------------------------------------------------------------
+# column spec: (model name, source column, dataType, options dict)
+KEY = {"hidden": True, "summarize": "none"}
+
+
+def pg_source(dbt_model: str, cols: list[str], extra_steps: list[str] | None = None,
+              optional: bool = False) -> list[str]:
+    """M for one dbt relation. optional=True: an absent relation yields an empty table with the same
+    columns instead of failing the whole refresh (used for core.dq_results until it is built)."""
+    sel = ", ".join(f'"{c}"' for c in cols)
+    nav = f'Source{{[Schema = PgSchema, Item = "{dbt_model}"]}}[Data]'
+    if optional:
+        empty = "#table(type table [" + ", ".join(f"{c} = any" for c in cols) + "], {})"
+        nav = f"try {nav} otherwise {empty}"
+    lines = [
+        "let",
+        "    Source = PostgreSQL.Database(PgServer, PgDatabase),",
+        f"    Data = {nav},",
+        f"    Selected = Table.SelectColumns(Data, {{{sel}}})" + ("," if extra_steps else ""),
+    ]
+    steps = extra_steps or []
+    for i, s in enumerate(steps):
+        lines.append("    " + s + ("," if i < len(steps) - 1 else ""))
+    last = steps[-1].split("=")[0].strip() if steps else "Selected"
+    lines += ["in", f"    {last}"]
+    return lines
+
+
+UF = [("AC", "Acre", "North"), ("AL", "Alagoas", "Northeast"), ("AP", "Amapá", "North"),
+      ("AM", "Amazonas", "North"), ("BA", "Bahia", "Northeast"), ("CE", "Ceará", "Northeast"),
+      ("DF", "Distrito Federal", "Center-West"), ("ES", "Espírito Santo", "Southeast"),
+      ("GO", "Goiás", "Center-West"), ("MA", "Maranhão", "Northeast"), ("MT", "Mato Grosso", "Center-West"),
+      ("MS", "Mato Grosso do Sul", "Center-West"), ("MG", "Minas Gerais", "Southeast"),
+      ("PA", "Pará", "North"), ("PB", "Paraíba", "Northeast"), ("PR", "Paraná", "South"),
+      ("PE", "Pernambuco", "Northeast"), ("PI", "Piauí", "Northeast"), ("RJ", "Rio de Janeiro", "Southeast"),
+      ("RN", "Rio Grande do Norte", "Northeast"), ("RS", "Rio Grande do Sul", "South"),
+      ("RO", "Rondônia", "North"), ("RR", "Roraima", "North"), ("SC", "Santa Catarina", "South"),
+      ("SP", "São Paulo", "Southeast"), ("SE", "Sergipe", "Northeast"), ("TO", "Tocantins", "North")]
+uf_rows = ", ".join(f'{{"{a}", "{b}", "{c}"}}' for a, b, c in UF)
+
+TABLES: list[dict] = [
+    {
+        "name": "Order Item", "dbt": "fct_order_items",
+        "desc": "Fact at order-line grain (order_id, order_item_id). One row = one unit (Olist has no quantity column).",
+        "cols": [
+            ("order_id", "order_id", "string", KEY),
+            ("order_item_id", "order_item_id", "int64", KEY),
+            ("product_sk", "product_sk", "string", KEY),
+            ("seller_sk", "seller_sk", "string", KEY),
+            ("item_price", "item_price", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("freight_value", "freight_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("Shipping Limit At", "shipping_limit_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("is_handover_on_time", "is_handover_on_time", "boolean", {"hidden": True, "summarize": "none"}),
+        ],
+    },
+    {
+        "name": "Order", "dbt": "fct_orders",
+        "desc": "Fact at order grain (order_id). Carries customer, status and purchase date; filters Order Item, Payment, Review and Delivery.",
+        "cols": [
+            ("Order ID", "order_id", "string", {"summarize": "none"}),
+            ("customer_sk", "customer_sk", "string", KEY),
+            ("order_status", "order_status", "string", KEY),
+            ("purchase_date_key", "purchase_date_key", "int64", KEY),
+            ("Purchased At", "purchased_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("Approved At", "approved_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("hours_to_approve", "hours_to_approve", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.0"}),
+            ("Review Score", "latest_review_score", "int64", {"summarize": "none"}),
+            ("payment_vs_items_diff", "payment_vs_items_diff", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+        ],
+    },
+    {
+        "name": "Payment", "dbt": "fct_payments",
+        "desc": "Fact at payment grain (order_id, payment_sequential). Transaction value, NOT sales and NOT cash flow. Never related to Order Item.",
+        "cols": [
+            ("order_id", "order_id", "string", KEY),
+            ("payment_sequential", "payment_sequential", "int64", KEY),
+            ("Payment Type", "payment_type", "string", {"summarize": "none"}),
+            ("Payment Installments", "payment_installments", "int64", {"summarize": "none"}),
+            ("payment_value", "payment_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+        ],
+    },
+    {
+        "name": "Delivery", "dbt": "fct_deliveries",
+        "desc": "Fact at order grain for fulfilment. Estimated date is Olist's customer estimate, not a contractual SLA.",
+        "cols": [
+            ("order_id", "order_id", "string", KEY),
+            ("delivered_date_key", "delivered_date_key", "int64", KEY),
+            ("Delivered At", "delivered_customer_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("Estimated Delivery At", "estimated_delivery_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd"}),
+            ("Carrier Handover At", "delivered_carrier_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+            ("is_on_time", "is_on_time", "boolean", {"hidden": True, "summarize": "none"}),
+            ("is_otd_eligible", "is_otd_eligible", "boolean", {"hidden": True, "summarize": "none"}),
+            ("delivery_days", "delivery_days", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.0"}),
+            ("dq_missing_delivery_ts", "dq_missing_delivery_ts", "boolean", {"hidden": True, "summarize": "none"}),
+            ("dq_delivered_before_purchase", "dq_delivered_before_purchase", "boolean", {"hidden": True, "summarize": "none"}),
+        ],
+    },
+    {
+        "name": "Customer", "dbt": "dim_customer",
+        "desc": "One row per customer_unique_id (the real person). customer_id is per-order in Olist and is not used for repeat logic.",
+        "cols": [
+            ("customer_sk", "customer_sk", "string", KEY),
+            ("Customer Unique ID", "customer_unique_id", "string", {"summarize": "none"}),
+            ("customer_state", "state", "string", KEY),
+            ("Customer City", "city", "string", {"summarize": "none"}),
+            ("First Order Date", "first_order_date", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd"}),
+            ("Lifetime Orders", "lifetime_orders", "int64", {"summarize": "none"}),
+        ],
+    },
+    {
+        "name": "Geography", "dbt": "dim_customer",
+        "desc": "Customer state (UF) level. State-level on purpose: zip-prefix geolocation has many rows per prefix. State name/region are IBGE reference data.",
+        "cols": [
+            ("State", "state_code", "string", {"summarize": "none"}),
+            ("State Name", "state_name", "string", {"summarize": "none"}),
+            ("Region", "region", "string", {"summarize": "none"}),
+        ],
+        "select": ["state"],
+        "steps": [
+            'States = Table.Distinct(Table.RenameColumns(Selected, {{"state", "state_code"}}))',
+            f'Ref = #table(type table [uf = text, state_name = text, region = text], {{{uf_rows}}})',
+            'Joined = Table.NestedJoin(States, {"state_code"}, Ref, {"uf"}, "ref", JoinKind.LeftOuter)',
+            'Expanded = Table.ExpandTableColumn(Joined, "ref", {"state_name", "region"})',
+        ],
+    },
+    {
+        "name": "Seller", "dbt": "dim_seller",
+        "desc": "Marketplace seller (merchant), not a supplier. Seller state is an attribute only (no Geography relationship, to avoid ambiguous paths).",
+        "cols": [
+            ("seller_sk", "seller_sk", "string", KEY),
+            ("Seller ID", "seller_id", "string", {"summarize": "none"}),
+            ("Seller City", "city", "string", {"summarize": "none"}),
+            ("Seller State", "state", "string", {"summarize": "none"}),
+        ],
+    },
+    {
+        "name": "Product", "dbt": "dim_product",
+        "desc": "Product with English category (falls back to Portuguese name where no translation exists, per STTM 2.7).",
+        "cols": [
+            ("product_sk", "product_sk", "string", KEY),
+            ("Product ID", "product_id", "string", {"summarize": "none"}),
+            ("Category", "category_name_en", "string", {"summarize": "none"}),
+            ("Category (PT)", "category_name_pt", "string", {"summarize": "none"}),
+        ],
+    },
+    {
+        "name": "Order Status", "dbt": "fct_orders",
+        "desc": "Distinct Olist order statuses with a display group.",
+        "cols": [
+            ("order_status", "order_status", "string", KEY),
+            ("Order Status", "Order Status", "string", {"summarize": "none"}),
+            ("Status Group", "Status Group", "string", {"summarize": "none"}),
+        ],
+        "select": ["order_status"],
+        "steps": [
+            "Distinct = Table.Distinct(Selected)",
+            'Named = Table.AddColumn(Distinct, "Order Status", each Text.Proper([order_status]), type text)',
+            'Grouped = Table.AddColumn(Named, "Status Group", each if List.Contains({"canceled", "unavailable"}, [order_status]) then "Canceled / Unavailable" else if [order_status] = "delivered" then "Delivered" else "In Progress", type text)',
+        ],
+    },
+    {
+        "name": "Date", "dbt": "dim_date", "date_table": True,
+        "desc": "Warehouse calendar core.dim_date (spine 2016-01-01..2019-12-31). Marked as date table on Date.",
+        "cols": [
+            ("date_key", "date_key", "int64", KEY),
+            ("Date", "date_day", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd", "key": True}),
+            ("Year", "year", "int64", {"summarize": "none", "fmt": "0"}),
+            ("Quarter", "quarter", "int64", {"summarize": "none", "fmt": "0"}),
+            ("Month No", "month", "int64", {"hidden": True, "summarize": "none", "fmt": "0"}),
+            ("Month", "month_name", "string", {"summarize": "none", "sortby": "Month No"}),
+            ("Month Start", "month_start", "dateTime", {"hidden": True, "summarize": "none", "fmt": "yyyy-mm-dd"}),
+            ("Year Month", "year_month", "string", {"summarize": "none", "sortby": "Month Start"}),
+        ],
+        "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"date_day", type date}, {"month_start", type date}})'],
+    },
+]
+
+TABLES.append({
+    "name": "DQ Results", "dbt": "dq_results", "optional": True,
+    "desc": "core.dq_results: one row per run_id x check_id, appended history. Standalone: no relationships to the Olist star.",
+    "cols": [
+        ("Run ID", "run_id", "string", {"summarize": "none"}),
+        ("Run At", "run_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
+        ("check_id", "check_id", "string", KEY),
+        ("Check", "check_name", "string", {"summarize": "none"}),
+        ("Layer", "layer", "string", {"summarize": "none"}),
+        ("Model", "model_name", "string", {"summarize": "none"}),
+        ("KPI ID", "kpi_id", "string", {"summarize": "none"}),
+        ("Severity", "severity", "string", {"summarize": "none"}),
+        ("weight", "weight", "double", {"hidden": True, "summarize": "none"}),
+        ("Status", "status", "string", {"summarize": "none"}),
+        ("failing_rows", "failing_rows", "int64", {"hidden": True, "summarize": "none"}),
+        ("source_value", "source_value", "double", {"hidden": True, "summarize": "none"}),
+        ("mart_value", "mart_value", "double", {"hidden": True, "summarize": "none"}),
+        ("variance", "variance", "double", {"hidden": True, "summarize": "none"}),
+    ],
+    "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"run_id", type text}, {"check_id", type text}, {"run_at", type datetime}, {"weight", type number}, {"failing_rows", Int64.Type}, {"source_value", type number}, {"mart_value", type number}, {"variance", type number}})'],
+})
+
+if DATE_COMPLETE_FLAG_COLUMN:
+    _date = next(t for t in TABLES if t["name"] == "Date")
+    _date["cols"].append((DATE_COMPLETE_FLAG_COLUMN, DATE_COMPLETE_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
+
+ROLES = [
+    # DEMO ONLY: static filter. Geography -> Customer -> Order -> Order Item / Payment / Delivery.
+    ("State Manager (demo)", "DEMO ONLY: static row filter to customer state SP. Replace with a user-to-state mapping table + USERPRINCIPALNAME() for production.",
+     [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")]),
+]
+
+# Relationships: (from table, from col [many], to table, to col [one], active)
+RELS = [
+    ("Order Item", "order_id", "Order", "Order ID", True),
+    ("Order Item", "product_sk", "Product", "product_sk", True),
+    ("Order Item", "seller_sk", "Seller", "seller_sk", True),
+    ("Payment", "order_id", "Order", "Order ID", True),
+    ("Delivery", "order_id", "Order", "Order ID", True),
+    ("Order", "customer_sk", "Customer", "customer_sk", True),
+    ("Order", "order_status", "Order Status", "order_status", True),
+    ("Order", "purchase_date_key", "Date", "date_key", True),
+    ("Customer", "customer_state", "Geography", "State", True),
+]
+
+BRL = "R$ #,0"
+BRL2 = "R$ #,0.00"
+PCT = "0.0%"
+INT = "#,0"
+
+
+
+def line_aware(expr: list[str]) -> list[str]:
+    """Order-grain measure that must also respond to Product/Seller filters.
+
+    Product and Seller filter only Order Item (many side of Order). When either is cross-filtered,
+    the expression runs with a bidirectional Order Item<->Order filter so it counts the orders that
+    contain the filtered lines; otherwise it runs unchanged (orders without items stay included).
+    """
+    body = ["    " + e for e in expr]
+    return (["VAR _lineFiltered = ISCROSSFILTERED ( 'Product' ) || ISCROSSFILTERED ( 'Seller' )",
+             "RETURN", "    IF (", "        _lineFiltered,", "        CALCULATE ("]
+            + ["        " + b for b in body[:-1]] + ["        " + body[-1] + ","]
+            + ["            CROSSFILTER ( 'Order Item'[order_id], 'Order'[Order ID], BOTH )", "        ),"]
+            + ["    " + b for b in body[:-1]] + ["    " + body[-1]] + ["    )"])
+
+
+def latest_run(expr: list[str]) -> list[str]:
+    """DQ measure evaluated on the latest run unless a run (Run ID / Run At) is in the filter context."""
+    return (["VAR _runSelected = ISFILTERED ( 'DQ Results'[Run ID] ) || ISFILTERED ( 'DQ Results'[Run At] )",
+             "VAR _runAt =",
+             "    IF (",
+             "        _runSelected,",
+             "        MAX ( 'DQ Results'[Run At] ),",
+             "        CALCULATE ( MAX ( 'DQ Results'[Run At] ), REMOVEFILTERS ( 'DQ Results' ) )",
+             "    )",
+             "RETURN",
+             "    CALCULATE ("]
+            + ["        " + e for e in expr[:-1]] + ["        " + expr[-1] + ","]
+            + ["        REMOVEFILTERS ( 'DQ Results'[Run ID] ),",
+               "        'DQ Results'[Run At] = _runAt", "    )"])
+
+
+growth = ["VAR _current = [GMV]",
+          "VAR _previous = CALCULATE ( [GMV], DATEADD ( 'Date'[Date], -1, MONTH ) )"]
+if DATE_COMPLETE_FLAG_COLUMN:
+    growth += [f"VAR _currentIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), KEEPFILTERS ( 'Date'[{DATE_COMPLETE_FLAG_COLUMN}] = FALSE () ) ) > 0",
+               f"VAR _previousIncomplete = CALCULATE ( COUNTROWS ( 'Date' ), DATEADD ( 'Date'[Date], -1, MONTH ), KEEPFILTERS ( 'Date'[{DATE_COMPLETE_FLAG_COLUMN}] = FALSE () ) ) > 0"]
+growth_cond = "ISBLANK ( _current ) || ISBLANK ( _previous ) || _previous = 0" + (
+    " || _currentIncomplete || _previousIncomplete" if DATE_COMPLETE_FLAG_COLUMN else "")
+growth += ["RETURN", f"    IF ( {growth_cond}, BLANK (), DIVIDE ( _current - _previous, _previous ) )"]
+
+HIDDEN_MEASURES = {"DQ Status Colour"}
+ELIG = "KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () )"
+MEASURES = [
+    # (folder, name, kpi_id, status, fmt, expression lines, description)
+    ("Sales", "GMV", "KPI_GMV", "SUPPORTED", BRL, ["SUM ( 'Order Item'[item_price] )"],
+     "Gross Merchandise Value: SUM(item_price), freight excluded. Not recognized revenue."),
+    ("Sales", "GMV incl Freight", "KPI_GMV_INCL_FREIGHT", "SUPPORTED", BRL, ["[GMV] + [Freight Value]"],
+     "GMV plus customer-paid freight."),
+    ("Sales", "Net GMV", "KPI_NET_GMV", "SUPPORTED", BRL,
+     ["CALCULATE (", "    [GMV],", "    KEEPFILTERS ( NOT 'Order'[order_status] IN { \"canceled\", \"unavailable\" } )", ")"],
+     "GMV of orders not canceled/unavailable."),
+    ("Sales", "Freight Value", "KPI_FREIGHT", "SUPPORTED", BRL, ["SUM ( 'Order Item'[freight_value] )"],
+     "Freight charged to customers (customer freight, not logistics cost)."),
+    ("Sales", "Freight Share %", "KPI_FREIGHT_SHARE", "SUPPORTED", PCT, ["DIVIDE ( [Freight Value], [GMV] )"],
+     "Freight Value / GMV (ratio of sums)."),
+    ("Sales", "GMV Growth %", "KPI_GMV_GROWTH", "PARTIAL", PCT, growth,
+     "Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank"
+     + (" or when the current or prior month is not complete (dim_date.is_complete_month = false)." if DATE_COMPLETE_FLAG_COLUMN else "; partial-month suppression disabled.")
+     + " PARTIAL: first/last coverage months are partial and sparse."),
+    ("Payments", "Payment Value", "KPI_PAYMENT_VALUE", "SUPPORTED", BRL, ["SUM ( 'Payment'[payment_value] )"],
+     "Sum of recorded payments. Transaction value, not sales, not cash flow; does not reconcile to items+freight for some orders."),
+    ("Payments", "Payment Mix %", "KPI_PAYMENT_VALUE", "SUPPORTED", PCT,
+     ["DIVIDE (", "    [Payment Value],", "    CALCULATE ( [Payment Value], REMOVEFILTERS ( 'Payment'[Payment Type] ) )", ")"],
+     "Supporting measure: share of Payment Value by payment type. Payment mix, never sales."),
+    ("Orders", "Orders", "KPI_ORDERS", "SUPPORTED", INT, line_aware(["COUNTROWS ( 'Order' )"]),
+     "Distinct orders (fct_orders unique on order_id). Under Product/Seller filters counts orders containing those lines."),
+    ("Orders", "Items Sold", "KPI_ITEMS_PER_ORDER", "SUPPORTED", INT, ["COUNTROWS ( 'Order Item' )"],
+     "Supporting measure: order lines (= units; Olist has one unit per line). Numerator of Items per Order."),
+    ("Orders", "AOV", "KPI_AOV", "SUPPORTED", BRL2,
+     ["VAR _ordersWithItems = DISTINCTCOUNT ( 'Order Item'[order_id] )", "RETURN", "    DIVIDE ( [GMV], _ordersWithItems )"],
+     "GMV / distinct orders with items (ratio of sums)."),
+    ("Orders", "Items per Order", "KPI_ITEMS_PER_ORDER", "SUPPORTED", "#,0.00",
+     ["DIVIDE ( [Items Sold], DISTINCTCOUNT ( 'Order Item'[order_id] ) )"],
+     "Order lines / distinct orders with items."),
+    ("Orders", "Cancellation Rate %", "KPI_CANCEL_RATE", "SUPPORTED", PCT,
+     ["VAR _canceled =", "    CALCULATE ( [Orders], KEEPFILTERS ( 'Order'[order_status] IN { \"canceled\", \"unavailable\" } ) )",
+      "RETURN", "    DIVIDE ( _canceled, [Orders] )"],
+     "Orders canceled or unavailable / Orders."),
+    ("Orders", "Avg Approval Hours", "KPI_APPROVAL_HOURS", "SUPPORTED", "#,0.0",
+     line_aware(["CALCULATE ( AVERAGE ( 'Order'[hours_to_approve] ), KEEPFILTERS ( 'Order'[hours_to_approve] >= 0 ) )"]),
+     "Average hours purchase -> approval (negative values excluded)."),
+    ("Customers", "Active Customers", "KPI_ACTIVE_CUSTOMERS", "SUPPORTED", INT,
+     line_aware(["DISTINCTCOUNT ( 'Order'[customer_sk] )"]),
+     "Distinct customer_unique_id (via customer_sk) with >=1 order in context."),
+    ("Customers", "New Customers", "KPI_NEW_CUSTOMERS", "SUPPORTED", INT,
+     ["VAR _start = MIN ( 'Date'[Date] )", "VAR _end = MAX ( 'Date'[Date] )", "RETURN",
+      "    CALCULATE (", "        COUNTROWS ( 'Customer' ),", "        'Order',",
+      "        KEEPFILTERS ( 'Customer'[First Order Date] >= _start && 'Customer'[First Order Date] <= _end )", "    )"],
+     "Active customers whose first order date falls in the selected period (by month = first-order cohort size)."),
+    ("Customers", "Repeat Purchase Rate %", "KPI_REPEAT_RATE", "SUPPORTED", PCT,
+     ["VAR _customers = VALUES ( 'Order'[customer_sk] )",
+      "VAR _repeat = COUNTROWS ( FILTER ( _customers, CALCULATE ( COUNTROWS ( 'Order' ) ) >= 2 ) )",
+      "RETURN", "    DIVIDE ( _repeat, COUNTROWS ( _customers ) )"],
+     "Customers (customer_unique_id) with 2+ distinct orders within the selected period / active customers in the period."),
+    ("Customers", "Customer Retention %", "KPI_CUSTOMER_RETENTION", "PARTIAL", PCT,
+     ["VAR _current = VALUES ( 'Order'[customer_sk] )",
+      "VAR _prior = CALCULATETABLE ( VALUES ( 'Order'[customer_sk] ), DATEADD ( 'Date'[Date], -1, MONTH ) )",
+      "RETURN", "    DIVIDE ( COUNTROWS ( INTERSECT ( _current, _prior ) ), COUNTROWS ( _prior ) )"],
+     "Customers active in the previous calendar month who order again in the current month / previous-month active. Evaluate at Year Month. PARTIAL: unstable on Olist's low repeat volume; show with [Retention Cohort Size]."),
+    ("Customers", "Retention Cohort Size", "KPI_CUSTOMER_RETENTION", "PARTIAL", INT,
+     ["CALCULATE ( [Active Customers], DATEADD ( 'Date'[Date], -1, MONTH ) )"],
+     "Supporting measure: denominator of Customer Retention % (previous-month active customers)."),
+    ("Delivery", "On-Time Delivery %", "KPI_OTD_RATE", "SUPPORTED", PCT,
+     line_aware(["DIVIDE (", f"    CALCULATE ( COUNTROWS ( 'Delivery' ), {ELIG}, KEEPFILTERS ( 'Delivery'[is_on_time] = TRUE () ) ),",
+                 f"    CALCULATE ( COUNTROWS ( 'Delivery' ), {ELIG} )", ")"]),
+     "Eligible orders (is_otd_eligible: delivered, delivered_customer_at present and >= purchased_at) delivered on/before the estimated date (date comparison) / eligible orders. Estimate is Olist's, not a contractual SLA. Dated by purchase date."),
+    ("Delivery", "On-Time Delivery % (by Delivery Date)", "KPI_OTD_RATE", "SUPPORTED", PCT,
+     ["CALCULATE (", "    [On-Time Delivery %],", "    REMOVEFILTERS ( 'Date' ),",
+      "    TREATAS ( VALUES ( 'Date'[date_key] ), 'Delivery'[delivered_date_key] )", ")"],
+     "Supporting measure: same KPI on the delivery-date role. The Date selection is moved from the purchase date (Date->Order) to Delivery[delivered_date_key] via TREATAS; Customer, Geography, Status and RLS still reach Delivery through Order."),
+    ("Delivery", "Late Orders", "KPI_OTD_RATE", "SUPPORTED", INT,
+     line_aware([f"CALCULATE ( COUNTROWS ( 'Delivery' ), {ELIG}, KEEPFILTERS ( 'Delivery'[is_on_time] = FALSE () ) )"]),
+     "Supporting measure: eligible orders delivered after the estimated date (complement of the OTD numerator)."),
+    ("Delivery", "Seller Handover On-Time %", "KPI_SELLER_HANDOVER_OTD", "PARTIAL", PCT,
+     ["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( 'Order Item'[is_handover_on_time] = TRUE () ) ),",
+      "    CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( NOT ISBLANK ( 'Order Item'[is_handover_on_time] ) ) )", ")"],
+     "Order items handed to the carrier (fct_deliveries.delivered_carrier_at) at or before the item's shipping_limit_at (full timestamp comparison, computed in dbt as fct_order_items.is_handover_on_time) / items with both timestamps. shipping_limit_at is Olist's seller shipping deadline, not a contractual SLA. PARTIAL: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time."),
+    ("Data Quality", "Handover Missing Timestamp", "KPI_SELLER_HANDOVER_OTD", "PARTIAL", INT,
+     ["CALCULATE ( COUNTROWS ( 'Order Item' ), KEEPFILTERS ( ISBLANK ( 'Order Item'[is_handover_on_time] ) ) )"],
+     "Data-quality exclusion count, not an operational KPI: order items missing delivered_carrier_at or shipping_limit_at (is_handover_on_time is NULL), excluded from Seller Handover On-Time %."),
+    ("Delivery", "Avg Delivery Days", "KPI_DELIVERY_DAYS", "SUPPORTED", "#,0.0",
+     line_aware([f"CALCULATE ( AVERAGE ( 'Delivery'[delivery_days] ), {ELIG} )"]),
+     "Average days purchase -> customer delivery over is_otd_eligible orders only (same filter as OTD)."),
+    ("Reviews", "Avg Review Score", "KPI_REVIEW_SCORE", "SUPPORTED", "0.00",
+     line_aware(["AVERAGE ( 'Order'[Review Score] )"]),
+     "Mean latest review score per order (fct_orders.latest_review_score), 1-5. CSAT proxy, not surveyed CSAT."),
+    ("Reviews", "Low Review %", "KPI_LOW_REVIEW_RATE", "SUPPORTED", PCT,
+     line_aware(["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) && 'Order'[Review Score] <= 2 ) ),",
+                 "    CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( NOT ISBLANK ( 'Order'[Review Score] ) ) )", ")"]),
+     "Orders with latest score <= 2 / orders reviewed."),
+    # ---- Data quality (core.dq_results, latest run unless a run is selected)
+    ("Data Quality", "DQ Score %", "KPI_DQ_SCORE", "SUPPORTED", PCT,
+     latest_run(["DIVIDE (", "    CALCULATE ( SUM ( 'DQ Results'[weight] ), KEEPFILTERS ( 'DQ Results'[Status] = \"pass\" ) ),",
+                 "    SUM ( 'DQ Results'[weight] )", ")"]),
+     "Sum of weights of checks with status pass / sum of all weights (warn counts as not pass). Latest run_at unless a run is selected."),
+    ("Data Quality", "Reconciliation Variance", "KPI_RECON_VARIANCE", "SUPPORTED", "#,0.00",
+     latest_run(["SUMX (", "    FILTER ( 'DQ Results', NOT ISBLANK ( 'DQ Results'[source_value] ) ),",
+                 "    'DQ Results'[mart_value] - 'DQ Results'[source_value]", ")"]),
+     "Sum of (mart_value - source_value) over checks with a source_value; slice by KPI ID. Latest run unless a run is selected."),
+    ("Data Quality", "Checks Failed", "KPI_DQ_SCORE", "SUPPORTED", INT,
+     latest_run(["CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = \"fail\" ) )"]),
+     "Supporting measure: checks with status fail in the latest (or selected) run."),
+    ("Data Quality", "Checks Warned", "KPI_DQ_SCORE", "SUPPORTED", INT,
+     latest_run(["CALCULATE ( COUNTROWS ( 'DQ Results' ), KEEPFILTERS ( 'DQ Results'[Status] = \"warn\" ) )"]),
+     "Supporting measure: checks with status warn in the latest (or selected) run."),
+    ("Data Quality", "Blocking Failures", "KPI_DQ_SCORE", "SUPPORTED", INT,
+     latest_run(["CALCULATE (", "    COUNTROWS ( 'DQ Results' ),", "    KEEPFILTERS ( 'DQ Results'[Status] = \"fail\" ),",
+                 "    KEEPFILTERS ( 'DQ Results'[Severity] = \"block\" )", ")"]),
+     "Supporting measure: failed checks with severity block in the latest (or selected) run."),
+    ("Data Quality", "Failing Rows", "KPI_DQ_SCORE", "SUPPORTED", INT,
+     latest_run(["SUM ( 'DQ Results'[failing_rows] )"]),
+     "Supporting measure: sum of failing_rows in the latest (or selected) run."),
+    ("Data Quality", "DQ Status Colour", "KPI_DQ_SCORE", "SUPPORTED", "",
+     latest_run(["SWITCH (", "    SELECTEDVALUE ( 'DQ Results'[Status] ),", "    \"pass\", \"#10B981\",",
+                 "    \"warn\", \"#F59E0B\",", "    \"fail\", \"#EF4444\",", "    \"#64748B\"", ")"]),
+     "Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden."),
+    ("Data Quality", "Payment Mismatch Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
+     ["CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )"],
+     "Supporting DQ measure from fct_orders: orders where |payments - (items+freight)| > 0.01 BRL (validation rule of KPI_PAYMENT_VALUE)."),
+    ("Data Quality", "Delivered Missing Timestamp", "KPI_OTD_RATE", "SUPPORTED", INT,
+     ["CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[dq_missing_delivery_ts] = TRUE () ) )"],
+     "Data-quality exclusion count, not an operational KPI: delivered orders without delivered_customer_at, excluded from OTD and delivery-days KPIs (fct_deliveries.dq_missing_delivery_ts)."),
+    ("Data Quality", "Delivered Before Purchase", "KPI_DELIVERY_DAYS", "SUPPORTED", INT,
+     ["CALCULATE ( COUNTROWS ( 'Delivery' ), KEEPFILTERS ( 'Delivery'[dq_delivered_before_purchase] = TRUE () ) )"],
+     "Data-quality exclusion count, not an operational KPI: delivery timestamp before purchase, excluded from OTD and delivery-days KPIs (fct_deliveries.dq_delivered_before_purchase)."),
+    ("Data Quality", "OTD Eligible Orders", "KPI_OTD_RATE", "SUPPORTED", INT,
+     [f"CALCULATE ( COUNTROWS ( 'Delivery' ), {ELIG} )"],
+     "Supporting measure: OTD denominator (is_otd_eligible = true)."),
+    ("Data Quality", "Payment Records", "KPI_PAYMENT_VALUE", "SUPPORTED", INT, ["COUNTROWS ( 'Payment' )"],
+     "Supporting DQ measure: row count of fct_payments in context."),
+]
+
+CALC_ITEMS = [
+    ("Current", ["SELECTEDMEASURE ()"], None),
+    ("MTD", ["CALCULATE ( SELECTEDMEASURE (), DATESMTD ( 'Date'[Date] ) )"], None),
+    ("QTD", ["CALCULATE ( SELECTEDMEASURE (), DATESQTD ( 'Date'[Date] ) )"], None),
+    ("YTD", ["CALCULATE ( SELECTEDMEASURE (), DATESYTD ( 'Date'[Date] ) )"], None),
+    ("PY", ["CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )"], None),
+    ("YoY", ["VAR _current = SELECTEDMEASURE ()",
+             "VAR _py = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )",
+             "RETURN", "    IF ( NOT ISBLANK ( _current ) && NOT ISBLANK ( _py ), _current - _py )"], None),
+    ("YoY %", ["VAR _current = SELECTEDMEASURE ()",
+               "VAR _py = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )",
+               "RETURN", "    IF ( NOT ISBLANK ( _current ) && NOT ISBLANK ( _py ), DIVIDE ( _current - _py, _py ) )"], '"0.0%"'),
+    ("Rolling 12M", ["CALCULATE (", "    SELECTEDMEASURE (),",
+                     "    DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH )", ")"], None),
+]
+
+
+def tmdl_expr(lines: list[str], indent: int) -> str:
+    pad = "\t" * indent
+    return "\n".join(pad + ln.replace("    ", "\t") if ln.startswith("    ") else pad + ln for ln in lines)
+
+
+def build_table(t: dict) -> str:
+    name = t["name"]
+    out = [f"/// {t['desc']}", f"table {q(name)}", f"\tlineageTag: {gid('table', name)}"]
+    if t.get("date_table"):
+        out.append("\tdataCategory: Time")
+    out.append("")
+    for cname, src, dtype, o in t["cols"]:
+        out.append(f"\tcolumn {q(cname)}")
+        out.append(f"\t\tdataType: {dtype}")
+        if o.get("key"):
+            out.append("\t\tisKey")
+        if o.get("hidden"):
+            out.append("\t\tisHidden")
+        if o.get("fmt"):
+            out.append(f"\t\tformatString: {o['fmt']}")
+        out.append(f"\t\tlineageTag: {gid('col', name, cname)}")
+        out.append(f"\t\tsummarizeBy: {o.get('summarize', 'none')}")
+        out.append(f"\t\tsourceColumn: {src}")
+        if o.get("sortby"):
+            out.append(f"\t\tsortByColumn: {q(o['sortby'])}")
+        out.append("")
+        out.append("\t\tannotation SummarizationSetBy = User")
+        out.append("")
+    for cname, dtype, expr, cdesc in t.get("calc_cols", []):
+        out.append(f"\t/// {cdesc}")
+        out.append(f"\tcolumn {q(cname)} =")
+        out.append(tmdl_expr(expr, 3))
+        out.append(f"\t\tdataType: {dtype}")
+        out.append("\t\tisHidden")
+        out.append(f"\t\tlineageTag: {gid('col', name, cname)}")
+        out.append("\t\tsummarizeBy: none")
+        out.append("")
+        out.append("\t\tannotation SummarizationSetBy = Automatic")
+        out.append("")
+    select = t.get("select") or [src for _, src, _, _ in t["cols"]]
+    m = pg_source(t["dbt"], select, t.get("steps"), optional=t.get("optional", False))
+    out.append(f"\tpartition {q(name)} = m")
+    out.append("\t\tmode: import")
+    out.append("\t\tsource =")
+    out.append(tmdl_expr(m, 4))
+    out.append("")
+    out.append("\tannotation PBI_ResultType = Table")
+    out.append("")
+    return "\n".join(out)
+
+
+def build_measures_table() -> str:
+    out = ["/// Home table for all explicit measures. Names follow docs/kpi-catalog.md; descriptions carry KPI ids.",
+           "table _Measures", f"\tlineageTag: {gid('table', '_Measures')}", ""]
+    for folder, name, kid, status, fmt, expr, desc in MEASURES:
+        out.append(f"\t/// {kid} ({status}): {desc}")
+        if len(expr) == 1:
+            out.append(f"\tmeasure {q(name)} = {expr[0]}")
+        else:
+            out.append(f"\tmeasure {q(name)} =")
+            out.append(tmdl_expr(expr, 3))
+        if fmt:
+            out.append(f"\t\tformatString: {fmt}")
+        if name in HIDDEN_MEASURES:
+            out.append("\t\tisHidden")
+        out.append(f"\t\tdisplayFolder: {folder}")
+        out.append(f"\t\tlineageTag: {gid('measure', name)}")
+        out.append("")
+        out.append(f"\t\tannotation KPI_Id = {kid}")
+        out.append("")
+        out.append(f"\t\tannotation KPI_Status = {status}")
+        out.append("")
+    out += ["\tcolumn Value", "\t\tdataType: string", "\t\tisHidden", f"\t\tlineageTag: {gid('col', '_Measures', 'Value')}",
+            "\t\tsummarizeBy: none", "\t\tsourceColumn: Value", "", "\t\tannotation SummarizationSetBy = Automatic", "",
+            "\tpartition _Measures = m", "\t\tmode: import", "\t\tsource =",
+            tmdl_expr(["let", "    Source = #table(type table [Value = text], {})", "in", "    Source"], 4), "",
+            "\tannotation PBI_ResultType = Table", ""]
+    return "\n".join(out)
+
+
+def build_calc_group() -> str:
+    out = ["/// Time intelligence calculation group. Requires the marked Date table. YoY on GMV is PARTIAL (coverage).",
+           "table 'Time Intelligence'", f"\tlineageTag: {gid('table', 'Time Intelligence')}", "",
+           "\tcalculationGroup", "\t\tprecedence: 10", ""]
+    for i, (name, expr, fse) in enumerate(CALC_ITEMS):
+        if len(expr) == 1:
+            out.append(f"\t\tcalculationItem {q(name)} = {expr[0]}")
+        else:
+            out.append(f"\t\tcalculationItem {q(name)} =")
+            out.append(tmdl_expr(expr, 4))
+        out.append(f"\t\t\tordinal: {i}")
+        out.append("\t\t\tformatStringDefinition = " + (fse or "SELECTEDMEASUREFORMATSTRING ()"))
+        out.append("")
+    out += ["\tcolumn 'Time Calculation'", "\t\tdataType: string", f"\t\tlineageTag: {gid('col', 'TI', 'name')}",
+            "\t\tsummarizeBy: none", "\t\tsourceColumn: Name", "\t\tsortByColumn: Ordinal", "",
+            "\t\tannotation SummarizationSetBy = Automatic", "",
+            "\tcolumn Ordinal", "\t\tdataType: int64", "\t\tisHidden", "\t\tformatString: 0",
+            f"\t\tlineageTag: {gid('col', 'TI', 'ordinal')}", "\t\tsummarizeBy: none", "\t\tsourceColumn: Ordinal", "",
+            "\t\tannotation SummarizationSetBy = Automatic", "",
+            "\tpartition 'Time Intelligence' = calculationGroup", "\t\tmode: import", ""]
+    return "\n".join(out)
+
+
+def build_model() -> None:
+    if SM.exists():
+        shutil.rmtree(SM)
+    d = SM / "definition"
+    wjson(SM / "definition.pbism", {"$schema": f"{MS}/item/semanticModel/definitionProperties/1.0.0/schema.json",
+                                    "version": "4.2", "settings": {}})
+    write(d / "database.tmdl", "database\n\tcompatibilityLevel: 1567\n\n")
+    all_tables = [t["name"] for t in TABLES] + ["_Measures", "Time Intelligence"]
+    model = ["model Model", "\tculture: en-US", "\tdefaultPowerBIDataSourceVersion: powerBI_V3",
+             "\tdiscourageImplicitMeasures", "\tsourceQueryCulture: en-US", "\tdataAccessOptions",
+             "\t\tlegacyRedirects", "\t\treturnErrorValuesAsNull", "",
+             'annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema"]', "",
+             "annotation __PBI_TimeIntelligenceEnabled = 0", "",
+             "annotation PBI_ProTooling = [\"DevMode\"]", ""]
+    model += [f"ref table {q(n)}" for n in all_tables] + [""] + [f"ref role {q(r[0])}" for r in ROLES] + ["", "ref cultureInfo en-US", ""]
+    for rname, rdesc, perms in ROLES:
+        rl = [f"/// {rdesc}", f"role {q(rname)}", "\tmodelPermission: read", ""]
+        for tname, flt in perms:
+            rl += [f"\ttablePermission {q(tname)} = {flt}", ""]
+        rl += [f"\tannotation PBI_Id = {gid('role', rname).replace('-', '')}", ""]
+        write(d / "roles" / f"{rname}.tmdl", "\n".join(rl))
+    write(d / "model.tmdl", "\n".join(model))
+    params = [("PgServer", "localhost:5432", "PostgreSQL server as host:port (laptop: localhost:5432)."),
+              ("PgDatabase", "enterprise360", "PostgreSQL database."),
+              ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core).")]
+    ex = []
+    for n, v, desc in params:
+        ex += [f"/// {desc}",
+               f'expression {n} = "{v}" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]',
+               f"\tlineageTag: {gid('expr', n)}", "", "\tannotation PBI_ResultType = Text", ""]
+    write(d / "expressions.tmdl", "\n".join(ex))
+    rel = []
+    for ft, fc, tt, tc, active in RELS:
+        rel.append(f"relationship {gid('rel', ft, fc, tt, tc)}")
+        if not active:
+            rel.append("\tisActive: false")
+        rel.append(f"\tfromColumn: {q(ft)}.{q(fc)}")
+        rel.append(f"\ttoColumn: {q(tt)}.{q(tc)}")
+        rel.append("")
+    write(d / "relationships.tmdl", "\n".join(rel))
+    write(d / "cultures" / "en-US.tmdl", "\n".join([
+        "cultureInfo en-US", "", "\tlinguisticMetadata =", "\t\t\t{", '\t\t\t  "Version": "1.0.0",',
+        '\t\t\t  "Language": "en-US"', "\t\t\t}", "\t\tcontentType: json", ""]))
+    for t in TABLES:
+        write(d / "tables" / f"{t['name']}.tmdl", build_table(t))
+    write(d / "tables" / "_Measures.tmdl", build_measures_table())
+    write(d / "tables" / "Time Intelligence.tmdl", build_calc_group())
+
+
+# --------------------------------------------------------------------------------------
+# Report (PBIR)
+# --------------------------------------------------------------------------------------
+def lit(v):
+    if isinstance(v, bool):
+        return {"expr": {"Literal": {"Value": "true" if v else "false"}}}
+    if isinstance(v, (int, float)):
+        return {"expr": {"Literal": {"Value": f"{v}D"}}}
+    return {"expr": {"Literal": {"Value": "'" + str(v).replace("'", "''") + "'"}}}
+
+
+def color(hexv: str):
+    return {"solid": {"color": lit(hexv)}}
+
+
+def fld(kind: str, entity: str, prop: str):
+    key = "Measure" if kind == "m" else "Column"
+    return {key: {"Expression": {"SourceRef": {"Entity": entity}}, "Property": prop}}
+
+
+def proj(kind: str, entity: str, prop: str, display: str | None = None):
+    p_ = {"field": fld(kind, entity, prop), "queryRef": f"{entity}.{prop}", "nativeQueryRef": prop}
+    if display:
+        p_["displayName"] = display
+    return p_
+
+
+M = "_Measures"
+PARTIAL_GROWTH = "Partial: 2016 and late-2018 coverage incomplete"
+PARTIAL_RETENTION = "Partial: low repeat base; 2016/late-2018 incomplete"
+PARTIAL_HANDOVER = "Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time."
+AMBER = "#F59E0B"
+
+
+def page_name(pid: str) -> str:
+    return hid("page", pid)
+
+
+class Page:
+    def __init__(self, pid: str, display: str, width: int = 1280, height: int = 720, ptype: str | None = None,
+                 hidden: bool = False, drill: tuple | None = None):
+        self.pid, self.display, self.width, self.height = pid, display, width, height
+        self.ptype, self.hidden, self.drill = ptype, hidden, drill
+        self.name = page_name(pid)
+        self.visuals: list[dict] = []
+        self.z = 0
+
+    def add(self, vname: str, vtype: str, pos: tuple, roles: dict | None = None, title: str | None = None,
+            subtitle: str | None = None, sort: tuple | None = None, objects: dict | None = None,
+            tooltip_page: str | None = None, link: dict | None = None, hidden: bool = False, card: bool = True) -> str:
+        x, y, w, h = pos
+        self.z += 1
+        v: dict = {"visualType": vtype}
+        if roles:
+            v["query"] = {"queryState": {r: {"projections": [proj(*p_) for p_ in ps]} for r, ps in roles.items()}}
+            if sort:
+                kind, ent, prop, direction = sort
+                v["query"]["sortDefinition"] = {"sort": [{"field": fld(kind, ent, prop), "direction": direction}],
+                                                "isDefaultSort": False}
+        if objects:
+            v["objects"] = objects
+        vco: dict = {}
+        if card:
+            vco["background"] = [{"properties": {"show": lit(True), "color": color("#111A2E"), "transparency": lit(0)}}]
+            vco["border"] = [{"properties": {"show": lit(True), "color": color("#1F2A44"), "radius": lit(8)}}]
+            vco["dropShadow"] = [{"properties": {"show": lit(False)}}]
+        if title:
+            vco["title"] = [{"properties": {"show": lit(True), "text": lit(title), "fontColor": color("#E5E7EB")}}]
+        else:
+            vco["title"] = [{"properties": {"show": lit(False)}}]
+        if subtitle:
+            vco["subTitle"] = [{"properties": {"show": lit(True), "text": lit(subtitle), "fontColor": color(AMBER)}}]
+        if tooltip_page:
+            vco["visualTooltip"] = [{"properties": {"show": lit(True), "type": lit("ReportPage"),
+                                                    "section": lit(page_name(tooltip_page))}}]
+        if link:
+            vco["visualLink"] = [{"properties": {k: lit(val) for k, val in link.items()}}]
+        v["visualContainerObjects"] = vco
+        v["drillFilterOtherVisuals"] = True
+        name = hid(self.pid, vname)
+        container = {"$schema": f"{MS}/item/report/definition/visualContainer/{V_VISUAL}/schema.json",
+                     "name": name,
+                     "position": {"x": x, "y": y, "z": self.z * 100, "height": h, "width": w, "tabOrder": self.z * 100},
+                     "visual": v}
+        if hidden:
+            container["isHidden"] = True
+        self.visuals.append(container)
+        return name
+
+
+CARD_OBJ = {"labels": [{"properties": {"color": color("#22D3EE"), "fontSize": lit(22)}}],
+            "categoryLabels": [{"properties": {"show": lit(False)}}]}
+SMALL_CARD_OBJ = {"labels": [{"properties": {"color": color("#22D3EE"), "fontSize": lit(16)}}],
+                  "categoryLabels": [{"properties": {"show": lit(False)}}]}
+SLICER_OBJ = {"data": [{"properties": {"mode": lit("Between")}}]}
+TOOLTIP_CATEGORY, TOOLTIP_STATE = "tooltip-category", "tooltip-state"
+NO_TOTALS = {"total": [{"properties": {"totals": lit(False)}}]}
+SUB_CATEGORY = "Order-level KPIs = orders containing the category; categories do not sum to the company figure"
+SUB_PRODUCT = "Order-level KPIs = orders containing the product; rows do not sum to the company figure"
+SUB_SELLER = "Order-level KPIs = orders containing the seller's items; sellers do not sum to the company figure"
+SUB_SELLER_STATE = "Orders containing items from sellers in each state"
+SUB_THIS_SELLER = "Orders containing this seller's items"
+CONTENT_Y = 212
+
+
+def header(pg: Page, date_slicer: bool = True) -> None:
+    pg.add("nav", "pageNavigator", (24, 8, 1232, 36), card=False)
+    if date_slicer:
+        pg.add("slicer-date", "slicer", (24, 52, 320, 48), {"Values": [("c", "Date", "Date")]}, "Purchase date",
+               objects=SLICER_OBJ)
+
+
+def cards(pg: Page, specs: list[tuple], y: int = 108, h: int = 92) -> None:
+    n, gap, x0, w_total = len(specs), 12, 24, 1232
+    w = (w_total - gap * (n - 1)) // n
+    for i, spec in enumerate(specs):
+        meas, title = spec[0], spec[1]
+        sub = spec[2] if len(spec) > 2 else None
+        pg.add(f"card-{meas}", "card", (x0 + i * (w + gap), y, w, h), {"Values": [("m", M, meas)]}, title,
+               subtitle=sub, objects=CARD_OBJ)
+
+
+def back_button(pg: Page) -> None:
+    pg.add("back", "actionButton", (1160, 56, 96, 40), None, None,
+           objects={"icon": [{"properties": {"shapeType": lit("back")}}],
+                    "text": [{"properties": {"show": lit(True), "text": lit("Back")}}]},
+           link={"show": True, "type": "Back"}, card=False)
+
+
+PAGES: list[Page] = []
+BOOKMARKS: list[dict] = []
+
+# ---- Executive Command Center (with Executive / Detail bookmarks)
+ex = Page("executive-command-center", "Executive Command Center")
+header(ex)
+cards(ex, [("GMV", "GMV (BRL)"), ("Orders", "Orders"), ("AOV", "AOV (BRL)"),
+           ("Avg Review Score", "Avg Review Score (1-5)"), ("On-Time Delivery %", "On-Time Delivery %")])
+exec_view = [
+    ex.add("trend", "lineChart", (24, CONTENT_Y, 776, 240),
+           {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV"), ("m", M, "Net GMV")]},
+           "Monthly GMV vs Net GMV (BRL)", sort=("c", "Date", "Year Month", "Ascending")),
+    ex.add("state", "clusteredBarChart", (812, CONTENT_Y, 444, 496),
+           {"Category": [("c", "Geography", "State")], "Y": [("m", M, "GMV")]},
+           "GMV by customer state", sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_STATE),
+    ex.add("category", "clusteredBarChart", (24, 464, 380, 244),
+           {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]},
+           "Top categories by GMV", sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_CATEGORY),
+    ex.add("growth", "clusteredColumnChart", (416, 464, 384, 244),
+           {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV Growth %")]},
+           "GMV Growth % (MoM)", subtitle=PARTIAL_GROWTH, sort=("c", "Date", "Year Month", "Ascending")),
+]
+detail_view = [
+    ex.add("detail-table", "tableEx", (24, CONTENT_Y, 1232, 496),
+           {"Values": [("c", "Date", "Year Month"), ("m", M, "GMV"), ("m", M, "Net GMV"), ("m", M, "Orders"),
+                       ("m", M, "AOV"), ("m", M, "Cancellation Rate %"), ("m", M, "On-Time Delivery %"),
+                       ("m", M, "Avg Delivery Days"), ("m", M, "Avg Review Score"), ("m", M, "GMV Growth %")]},
+           "Monthly scorecard (GMV Growth %: partial coverage)", subtitle=PARTIAL_GROWTH,
+           sort=("c", "Date", "Year Month", "Ascending"), hidden=True),
+]
+BM_EXEC, BM_DETAIL = "bm-executive-view", "bm-detail-view"
+for bname, label, x in ((BM_EXEC, "Executive view", 760), (BM_DETAIL, "Detail view", 900)):
+    ex.add(f"btn-{bname}", "actionButton", (x, 56, 128, 40), None, None,
+           objects={"text": [{"properties": {"show": lit(True), "text": lit(label)}}]},
+           link={"show": True, "type": "Bookmark", "bookmark": hid("bookmark", bname)}, card=False)
+for bname, label, show, hide in ((BM_EXEC, "Executive view", exec_view, detail_view),
+                                 (BM_DETAIL, "Detail view", detail_view, exec_view)):
+    vtypes = {v["name"]: v["visual"]["visualType"] for v in ex.visuals}
+    state = {n: {"singleVisual": {"visualType": vtypes[n]}} for n in show}
+    state.update({n: {"singleVisual": {"visualType": vtypes[n], "display": {"mode": "hidden"}}} for n in hide})
+    BOOKMARKS.append({
+        "$schema": f"{MS}/item/report/definition/bookmark/{V_BOOKMARK}/schema.json",
+        "displayName": label, "name": hid("bookmark", bname),
+        "options": {"targetVisualNames": show + hide, "applyOnlyToTargetVisuals": True, "suppressData": True},
+        "explorationState": {"version": "1.3", "activeSection": ex.name,
+                             "sections": {ex.name: {"visualContainers": state}}},
+    })
+PAGES.append(ex)
+
+# ---- Sales Performance
+sp = Page("sales-performance", "Sales Performance")
+header(sp)
+cards(sp, [("GMV", "GMV (BRL)"), ("Net GMV", "Net GMV (BRL)"), ("Items per Order", "Items per Order"),
+           ("Freight Share %", "Freight Share % (customer freight)"), ("Cancellation Rate %", "Cancellation Rate %"),
+           ("Repeat Purchase Rate %", "Repeat Purchase Rate % (within selected period)", PARTIAL_RETENTION)])
+sp.add("trend", "lineChart", (24, CONTENT_Y, 616, 236), {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV")]},
+       "GMV trend (BRL)", sort=("c", "Date", "Year Month", "Ascending"))
+sp.add("category", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
+       {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]}, "GMV by category",
+       sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_CATEGORY)
+sp.add("state", "clusteredBarChart", (964, CONTENT_Y, 292, 236),
+       {"Category": [("c", "Geography", "State")], "Y": [("m", M, "GMV")]}, "GMV by customer state",
+       sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_STATE)
+sp.add("paymix", "donutChart", (24, 460, 400, 248),
+       {"Category": [("c", "Payment", "Payment Type")], "Y": [("m", M, "Payment Value")]},
+       "Payment mix by type (payment value, not sales)")
+sp.add("sellers", "tableEx", (436, 460, 820, 248),
+       {"Values": [("c", "Seller", "Seller ID"), ("c", "Seller", "Seller State"), ("m", M, "GMV"), ("m", M, "Orders"),
+                   ("m", M, "AOV"), ("m", M, "On-Time Delivery %"),
+                   ("m", M, "Avg Review Score", "Avg Review Score of orders containing seller")]},
+       "Top sellers by GMV (right-click a seller > Drill through > Seller Detail)", subtitle=SUB_SELLER,
+       sort=("m", M, "GMV", "Descending"), objects=NO_TOTALS)
+PAGES.append(sp)
+
+# ---- Customer Intelligence
+ci = Page("customer-intelligence", "Customer Intelligence")
+header(ci)
+cards(ci, [("Active Customers", "Active Customers"), ("New Customers", "New Customers"),
+           ("Repeat Purchase Rate %", "Repeat Purchase Rate % (within selected period)", PARTIAL_RETENTION),
+           ("Customer Retention %", "Customer Retention % (prior month)", PARTIAL_RETENTION),
+           ("Retention Cohort Size", "Retention Cohort Size (prior-month active)", PARTIAL_RETENTION)])
+ci.add("trend", "lineChart", (24, CONTENT_Y, 616, 236),
+       {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "Active Customers"), ("m", M, "New Customers")]},
+       "Active vs new customers by month (new = first-order cohort size)", sort=("c", "Date", "Year Month", "Ascending"))
+ci.add("region", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
+       {"Category": [("c", "Geography", "Region")], "Y": [("m", M, "Active Customers")]}, "Active customers by region",
+       sort=("m", M, "Active Customers", "Descending"))
+ci.add("state", "clusteredBarChart", (964, CONTENT_Y, 292, 496),
+       {"Category": [("c", "Geography", "State")], "Y": [("m", M, "Active Customers")]}, "Active customers by state",
+       sort=("m", M, "Active Customers", "Descending"), tooltip_page=TOOLTIP_STATE)
+ci.add("retention", "tableEx", (24, 460, 928, 248),
+       {"Values": [("c", "Date", "Year Month"), ("m", M, "Active Customers"), ("m", M, "New Customers"),
+                   ("m", M, "Repeat Purchase Rate %"), ("m", M, "Customer Retention %"), ("m", M, "Retention Cohort Size")]},
+       "Monthly retention with cohort size (repeat rate within each month)", subtitle=PARTIAL_RETENTION,
+       sort=("c", "Date", "Year Month", "Ascending"))
+PAGES.append(ci)
+
+# ---- Product Performance
+pp = Page("product-performance", "Product Performance")
+header(pp)
+cards(pp, [("GMV", "GMV (BRL)"), ("Items Sold", "Items Sold"), ("AOV", "AOV (BRL)"),
+           ("Items per Order", "Items per Order"), ("Freight Share %", "Freight Share %")])
+pp.add("category", "clusteredBarChart", (24, CONTENT_Y, 400, 496),
+       {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]}, "GMV by category",
+       sort=("m", M, "GMV", "Descending"), tooltip_page=TOOLTIP_CATEGORY)
+pp.add("category-table", "tableEx", (436, CONTENT_Y, 820, 244),
+       {"Values": [("c", "Product", "Category"), ("m", M, "GMV"), ("m", M, "Items Sold"), ("m", M, "AOV"),
+                   ("m", M, "Items per Order"),
+                   ("m", M, "Avg Review Score", "Avg Review Score of orders containing category"),
+                   ("m", M, "Freight Share %")]},
+       "Category scorecard", subtitle=SUB_CATEGORY, sort=("m", M, "GMV", "Descending"), objects=NO_TOTALS)
+pp.add("products", "tableEx", (436, 468, 820, 240),
+       {"Values": [("c", "Product", "Product ID"), ("c", "Product", "Category"), ("m", M, "GMV"), ("m", M, "Items Sold"),
+                   ("m", M, "Avg Review Score", "Avg Review Score of orders containing product"),
+                   ("m", M, "Freight Share %")]},
+       "Top products by GMV", subtitle=SUB_PRODUCT, sort=("m", M, "GMV", "Descending"), objects=NO_TOTALS)
+PAGES.append(pp)
+
+# ---- Operations / Delivery
+op = Page("operations-delivery", "Operations & Delivery")
+header(op)
+cards(op, [("On-Time Delivery %", "On-Time Delivery %"), ("Avg Delivery Days", "Avg Delivery Days"),
+           ("Late Orders", "Late Orders"), ("Cancellation Rate %", "Cancellation Rate %"),
+           ("Avg Approval Hours", "Avg Approval Hours"),
+           ("Seller Handover On-Time %", "Seller handover on-time % (vs Olist shipping deadline)", PARTIAL_HANDOVER)])
+op.add("otd-trend", "lineChart", (24, CONTENT_Y, 616, 236),
+       {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "On-Time Delivery % (by Delivery Date)")]},
+       "On-time delivery % by delivery month (estimate is Olist's, not a contractual SLA)",
+       sort=("c", "Date", "Year Month", "Ascending"))
+op.add("otd-state", "clusteredBarChart", (652, CONTENT_Y, 300, 236),
+       {"Category": [("c", "Geography", "State")], "Y": [("m", M, "On-Time Delivery %")]},
+       "On-time % by customer state", sort=("m", M, "On-Time Delivery %", "Ascending"), tooltip_page=TOOLTIP_STATE)
+op.add("otd-seller-state", "clusteredBarChart", (964, CONTENT_Y, 292, 236),
+       {"Category": [("c", "Seller", "Seller State")], "Y": [("m", M, "On-Time Delivery %"), ("m", M, "Seller Handover On-Time %")]},
+       "On-time delivery % and seller handover on-time % (vs Olist shipping deadline) by seller state",
+       subtitle=SUB_SELLER_STATE + ". " + PARTIAL_HANDOVER, sort=("m", M, "On-Time Delivery %", "Ascending"))
+op.add("status-funnel", "funnel", (24, 460, 400, 248),
+       {"Category": [("c", "Order Status", "Order Status")], "Y": [("m", M, "Orders")]}, "Orders by status",
+       sort=("m", M, "Orders", "Descending"))
+op.add("late-orders", "tableEx", (436, 460, 820, 248),
+       {"Values": [("c", "Order", "Order ID"), ("c", "Order", "Purchased At"), ("c", "Delivery", "Estimated Delivery At"),
+                   ("c", "Delivery", "Delivered At"), ("m", M, "Late Orders"), ("m", M, "Avg Delivery Days")]},
+       "Late orders (right-click > Drill through > Order Detail)", sort=("m", M, "Avg Delivery Days", "Descending"))
+PAGES.append(op)
+
+# ---- Data Quality
+dq = Page("data-quality", "Data Quality")
+header(dq, date_slicer=False)
+dq.add("slicer-run", "slicer", (24, 52, 320, 48), {"Values": [("c", "DQ Results", "Run At")]},
+       "dbt run (default: latest)", objects={"data": [{"properties": {"mode": lit("Dropdown")}}]})
+cards(dq, [("DQ Score %", "DQ Score % (latest run)"), ("Blocking Failures", "Blocking failures"),
+           ("Checks Failed", "Checks failed"), ("Checks Warned", "Checks warned"), ("Failing Rows", "Failing rows")])
+dq.add("checks", "tableEx", (24, CONTENT_Y, 800, 300),
+       {"Values": [("c", "DQ Results", "Check"), ("c", "DQ Results", "Layer"), ("c", "DQ Results", "Model"),
+                   ("c", "DQ Results", "KPI ID"), ("c", "DQ Results", "Severity"), ("c", "DQ Results", "Status"),
+                   ("m", M, "Failing Rows"), ("m", M, "Reconciliation Variance")]},
+       "Checks (latest run unless a run is selected)", sort=("m", M, "Failing Rows", "Descending"),
+       objects={"values": [{"properties": {"backColor": {"solid": {"color": {"expr": fld("m", M, "DQ Status Colour")}}}},
+                            "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}],
+                                         "metadata": "DQ Results.Status"}}]})
+dq.add("recon", "clusteredBarChart", (836, CONTENT_Y, 420, 300),
+       {"Category": [("c", "DQ Results", "KPI ID")], "Y": [("m", M, "Reconciliation Variance")]},
+       "Reconciliation variance by KPI (mart - source)", sort=("m", M, "Reconciliation Variance", "Descending"))
+dq.add("score-trend", "lineChart", (24, 524, 800, 184),
+       {"Category": [("c", "DQ Results", "Run At")], "Y": [("m", M, "DQ Score %")]}, "DQ Score % by run",
+       sort=("c", "DQ Results", "Run At", "Ascending"))
+dq.add("warehouse-checks", "multiRowCard", (836, 524, 420, 184),
+       {"Values": [("m", M, "Payment Mismatch Orders"), ("m", M, "Delivered Missing Timestamp"),
+                   ("m", M, "Delivered Before Purchase"), ("m", M, "Handover Missing Timestamp"), ("m", M, "OTD Eligible Orders"), ("m", M, "Orders"),
+                   ("m", M, "Items Sold"), ("m", M, "Payment Records")]},
+       "Warehouse checks from fct tables (purchase-date slicers do not apply here)")
+PAGES.append(dq)
+
+# ---- Drill-through: Order Detail
+od = Page("order-detail", "Order Detail", ptype="Drillthrough", hidden=True, drill=("Order", "Order ID"))
+od.add("nav", "pageNavigator", (24, 8, 1232, 36), card=False)
+back_button(od)
+od.add("order", "tableEx", (24, 108, 1232, 120),
+       {"Values": [("c", "Order", "Order ID"), ("c", "Order Status", "Order Status"), ("c", "Order", "Purchased At"),
+                   ("c", "Order", "Approved At"), ("c", "Delivery", "Estimated Delivery At"), ("c", "Delivery", "Delivered At"),
+                   ("c", "Order", "Review Score")]},
+       "Order status, delivery timestamps and latest review")
+od.add("lines", "tableEx", (24, 240, 808, 468),
+       {"Values": [("c", "Product", "Product ID"), ("c", "Product", "Category"), ("c", "Seller", "Seller ID"),
+                   ("m", M, "Items Sold"), ("m", M, "GMV"), ("m", M, "Freight Value")]},
+       "Order lines (GMV = item price, freight separate)")
+od.add("payments", "tableEx", (844, 240, 412, 468),
+       {"Values": [("c", "Payment", "Payment Type"), ("c", "Payment", "Payment Installments"), ("m", M, "Payment Value")]},
+       "Payments (transaction value, not sales)")
+PAGES.append(od)
+
+# ---- Drill-through: Seller Detail
+sd = Page("seller-detail", "Seller Detail", ptype="Drillthrough", hidden=True, drill=("Seller", "Seller ID"))
+sd.add("nav", "pageNavigator", (24, 8, 1232, 36), card=False)
+sd.add("seller", "multiRowCard", (24, 52, 600, 48), {"Values": [("c", "Seller", "Seller ID"), ("c", "Seller", "Seller State")]},
+       None)
+back_button(sd)
+cards(sd, [("GMV", "GMV (BRL)"), ("Orders", "Orders", SUB_THIS_SELLER), ("AOV", "AOV (BRL)", SUB_THIS_SELLER),
+           ("On-Time Delivery %", "On-Time Delivery %", SUB_THIS_SELLER),
+           ("Avg Review Score", "Avg Review Score of orders containing seller")])
+sd.add("trend", "lineChart", (24, CONTENT_Y, 616, 236), {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "GMV")]},
+       "Seller GMV trend", sort=("c", "Date", "Year Month", "Ascending"))
+sd.add("categories", "clusteredBarChart", (652, CONTENT_Y, 604, 236),
+       {"Category": [("c", "Product", "Category")], "Y": [("m", M, "GMV")]}, "Top categories for this seller",
+       sort=("m", M, "GMV", "Descending"))
+sd.add("orders", "tableEx", (24, 460, 1232, 248),
+       {"Values": [("c", "Order", "Order ID"), ("c", "Order", "Purchased At"), ("m", M, "Items Sold"), ("m", M, "GMV"),
+                   ("m", M, "Freight Value")]},
+       "Seller's orders (right-click > Drill through > Order Detail)", subtitle="GMV and freight = this seller's lines only",
+       sort=("c", "Order", "Purchased At", "Descending"), objects=NO_TOTALS)
+PAGES.append(sd)
+
+# ---- Tooltip pages
+for tid, display, field in ((TOOLTIP_CATEGORY, "Tooltip - Category", ("Product", "Category")),
+                            (TOOLTIP_STATE, "Tooltip - State", ("Geography", "State"))):
+    tp = Page(tid, display, width=320, height=240, ptype="Tooltip", hidden=True)
+    tp.add("title", "multiRowCard", (8, 8, 304, 40), {"Values": [("c", field[0], field[1])]}, None, card=False)
+    specs = ([("GMV", "GMV (BRL)"), ("AOV", "AOV of orders containing category"),
+              ("Avg Review Score", "Avg Review Score of orders containing category"),
+              ("On-Time Delivery %", "On-time % of orders containing category")] if tid == TOOLTIP_CATEGORY else
+             [("GMV", "GMV (BRL)"), ("AOV", "AOV (BRL)"), ("Avg Review Score", "Avg Review Score"),
+              ("On-Time Delivery %", "On-time %")])
+    for i, (meas, title) in enumerate(specs):
+        tp.add(f"card-{meas}", "card", (8 + (i % 2) * 156, 56 + (i // 2) * 90, 148, 82),
+               {"Values": [("m", M, meas)]}, title, objects=SMALL_CARD_OBJ)
+    PAGES.append(tp)
+
+THEME_NAME = "Enterprise360Dark"
+THEME = {
+    "$schema": "https://raw.githubusercontent.com/microsoft/powerbi-desktop-samples/main/Report%20Theme%20JSON%20Schema/reportThemeSchema-2.159.json",
+    "name": THEME_NAME,
+    "dataColors": ["#22D3EE", "#3B82F6", "#818CF8", "#2DD4BF", "#60A5FA", "#A78BFA", "#94A3B8", "#F59E0B"],
+    "foreground": "#E5E7EB", "foregroundNeutralSecondary": "#94A3B8", "foregroundNeutralTertiary": "#64748B",
+    "background": "#0B1220", "secondaryBackground": "#111A2E", "backgroundLight": "#1F2A44",
+    "backgroundNeutral": "#1F2A44", "tableAccent": "#22D3EE", "accent": "#22D3EE",
+    "good": "#10B981", "neutral": "#F59E0B", "bad": "#EF4444",
+    "maximum": "#22D3EE", "center": "#3B82F6", "minimum": "#1E3A8A", "null": "#64748B",
+    "hyperlink": "#22D3EE", "visitedHyperlink": "#60A5FA",
+    "textClasses": {
+        "callout": {"fontSize": 22, "fontFace": "Segoe UI Semibold", "color": "#22D3EE"},
+        "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#E5E7EB"},
+        "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#E5E7EB"},
+        "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": "#94A3B8"},
+    },
+    "visualStyles": {
+        "page": {"*": {"background": [{"color": {"solid": {"color": "#0B1220"}}, "transparency": 0}],
+                       "outspace": [{"color": {"solid": {"color": "#0B1220"}}}]}},
+        "*": {"*": {"title": [{"fontColor": {"solid": {"color": "#E5E7EB"}}, "fontSize": 11}],
+                    "visualHeader": [{"background": {"solid": {"color": "#111A2E"}},
+                                      "foreground": {"solid": {"color": "#94A3B8"}}}]}},
+        "actionButton": {"*": {"fill": [{"show": True, "fillColor": {"solid": {"color": "#1F2A44"}}}],
+                               "text": [{"fontColor": {"solid": {"color": "#E5E7EB"}}}]}},
+        "pageNavigator": {"*": {"fill": [{"show": True, "fillColor": {"solid": {"color": "#111A2E"}}}],
+                                "text": [{"fontColor": {"solid": {"color": "#94A3B8"}}}]}},
+    },
+}
+
+
+def build_report() -> None:
+    if RP.exists():
+        shutil.rmtree(RP)
+    wjson(RP / "definition.pbir", {"$schema": f"{MS}/item/report/definitionProperties/2.0.0/schema.json",
+                                   "version": "4.0",
+                                   "datasetReference": {"byPath": {"path": "../Enterprise360.SemanticModel"}}})
+    d = RP / "definition"
+    wjson(d / "version.json", {"$schema": f"{MS}/item/report/definition/versionMetadata/1.0.0/schema.json",
+                               "version": "2.0.0"})
+    theme_file = f"{THEME_NAME}.json"
+    wjson(d / "report.json", {
+        "$schema": f"{MS}/item/report/definition/report/{V_REPORT}/schema.json",
+        "themeCollection": {"customTheme": {"name": theme_file,
+                                            "reportVersionAtImport": {"visual": V_VISUAL, "report": V_REPORT, "page": V_PAGE},
+                                            "type": "RegisteredResources"}},
+        "resourcePackages": [{"name": "RegisteredResources", "type": "RegisteredResources",
+                              "items": [{"name": theme_file, "path": theme_file, "type": "CustomTheme"}]}],
+        "settings": {"useStylableVisualContainerHeader": True, "defaultDrillFilterOtherVisuals": True,
+                     "exportDataMode": "AllowSummarized"},
+    })
+    wjson(RP / "StaticResources" / "RegisteredResources" / theme_file, THEME)
+    wjson(d / "pages" / "pages.json", {"$schema": f"{MS}/item/report/definition/pagesMetadata/1.0.0/schema.json",
+                                       "pageOrder": [p.name for p in PAGES], "activePageName": PAGES[0].name})
+    for pg in PAGES:
+        page: dict = {"$schema": f"{MS}/item/report/definition/page/{V_PAGE}/schema.json",
+                      "name": pg.name, "displayName": pg.display,
+                      "displayOption": "ActualSize" if pg.ptype == "Tooltip" else "FitToPage",
+                      "height": pg.height, "width": pg.width}
+        if pg.drill:
+            ent, prop = pg.drill
+            fname = hid("drillfilter", pg.pid)
+            page["filterConfig"] = {"filters": [{"name": fname, "field": fld("c", ent, prop), "type": "Categorical",
+                                                 "howCreated": "Drillthrough"}]}
+            page["pageBinding"] = {"name": hid("binding", pg.pid), "type": "Drillthrough",
+                                   "parameters": [{"name": hid("param", pg.pid), "boundFilter": fname,
+                                                   "fieldExpr": fld("c", ent, prop)}]}
+        elif pg.ptype == "Tooltip":
+            page["pageBinding"] = {"name": hid("binding", pg.pid), "type": "Tooltip"}
+        page["objects"] = {"background": [{"properties": {"color": color("#0B1220"), "transparency": lit(0)}}],
+                           "outspace": [{"properties": {"color": color("#0B1220")}}]}
+        if pg.ptype:
+            page["type"] = pg.ptype
+        if pg.hidden:
+            page["visibility"] = "HiddenInViewMode"
+        wjson(d / "pages" / pg.name / "page.json", page)
+        for v in pg.visuals:
+            wjson(d / "pages" / pg.name / "visuals" / v["name"] / "visual.json", v)
+    bdir = d / "bookmarks"
+    wjson(bdir / "bookmarks.json", {"$schema": f"{MS}/item/report/definition/bookmarksMetadata/1.0.0/schema.json",
+                                    "items": [{"name": b["name"]} for b in BOOKMARKS]})
+    for b in BOOKMARKS:
+        wjson(bdir / f"{b['name']}.bookmark.json", b)
+    wjson(ROOT / "Enterprise360.pbip", {"$schema": f"{MS}/pbip/pbipProperties/1.0.0/schema.json", "version": "1.0",
+                                        "artifacts": [{"report": {"path": "Enterprise360.Report"}}],
+                                        "settings": {"enableAutoRecovery": True}})
+
+
+if __name__ == "__main__":
+    build_model()
+    build_report()
+    print("generated", SM, RP)

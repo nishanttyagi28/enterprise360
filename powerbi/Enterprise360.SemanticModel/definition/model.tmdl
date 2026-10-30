@@ -1,0 +1,32 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema"]
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table 'Order Item'
+ref table Order
+ref table Payment
+ref table Delivery
+ref table Customer
+ref table Geography
+ref table Seller
+ref table Product
+ref table 'Order Status'
+ref table Date
+ref table 'DQ Results'
+ref table _Measures
+ref table 'Time Intelligence'
+
+ref role 'State Manager (demo)'
+
+ref cultureInfo en-US

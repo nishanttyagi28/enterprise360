@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.0.0/schema.json",
+  "name": "a25c1edb824c58689b79",
+  "displayName": "Tooltip - State",
+  "displayOption": "ActualSize",
+  "height": 240,
+  "width": 320,
+  "pageBinding": {
+    "name": "ce4022e25201504b9652",
+    "type": "Tooltip"
+  },
+  "objects": {
+    "background": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#0B1220'"
+                  }
+                }
+              }
+            }
+          },
+          "transparency": {
+            "expr": {
+              "Literal": {
+                "Value": "0D"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "outspace": [
+      {
+        "properties": {
+          "color": {
+            "solid": {
+              "color": {
+                "expr": {
+                  "Literal": {
+                    "Value": "'#0B1220'"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "type": "Tooltip",
+  "visibility": "HiddenInViewMode"
+}

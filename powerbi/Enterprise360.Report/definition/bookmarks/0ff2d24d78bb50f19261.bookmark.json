@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/bookmark/2.0.0/schema.json",
+  "displayName": "Executive view",
+  "name": "0ff2d24d78bb50f19261",
+  "options": {
+    "targetVisualNames": [
+      "1dddba3219ec55079606",
+      "0392bfa469ae5fa4a869",
+      "8ee10a96056b526d8587",
+      "d41414730131581f9410",
+      "875708ba6b65513aa942"
+    ],
+    "applyOnlyToTargetVisuals": true,
+    "suppressData": true
+  },
+  "explorationState": {
+    "version": "1.3",
+    "activeSection": "5dbc4bb196755005b719",
+    "sections": {
+      "5dbc4bb196755005b719": {
+        "visualContainers": {
+          "1dddba3219ec55079606": {
+            "singleVisual": {
+              "visualType": "lineChart"
+            }
+          },
+          "0392bfa469ae5fa4a869": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart"
+            }
+          },
+          "8ee10a96056b526d8587": {
+            "singleVisual": {
+              "visualType": "clusteredBarChart"
+            }
+          },
+          "d41414730131581f9410": {
+            "singleVisual": {
+              "visualType": "clusteredColumnChart"
+            }
+          },
+          "875708ba6b65513aa942": {
+            "singleVisual": {
+              "visualType": "tableEx",
+              "display": {
+                "mode": "hidden"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

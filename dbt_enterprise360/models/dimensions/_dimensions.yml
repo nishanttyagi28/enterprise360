@@ -1,0 +1,47 @@
+version: 2
+models:
+  - name: dim_date
+    description: Calendar spine {{ var('date_spine_start') }}..{{ var('date_spine_end') }}; date_key = YYYYMMDD.
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+      - name: date_day
+        tests: [unique, not_null]
+      - name: is_complete_month
+        description: Whole calendar month inside Olist purchase coverage (int_olist__month_coverage).
+        tests: [not_null]
+  - name: dim_geography
+    columns:
+      - name: geography_sk
+        tests: [unique, not_null]
+      - name: zip_prefix
+        tests: [unique, not_null]
+  - name: dim_customer
+    columns:
+      - name: customer_sk
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        tests: [unique, not_null]
+      - name: geography_sk
+        tests:
+          - relationships: {to: "ref('dim_geography')", field: geography_sk}
+      - name: lifetime_orders
+        tests:
+          - dbt_utils.accepted_range: {min_value: 1}
+  - name: dim_product
+    columns:
+      - name: product_sk
+        tests: [unique, not_null]
+      - name: product_id
+        tests: [unique, not_null]
+      - name: category_name_en
+        tests: [not_null]
+  - name: dim_seller
+    columns:
+      - name: seller_sk
+        tests: [unique, not_null]
+      - name: seller_id
+        tests: [unique, not_null]
+      - name: geography_sk
+        tests:
+          - relationships: {to: "ref('dim_geography')", field: geography_sk}
