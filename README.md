@@ -12,6 +12,7 @@
 ![Power BI](https://img.shields.io/badge/Power%20BI-PBIP%20%7C%20TMDL-F2C811?logo=powerbi&logoColor=black)
 ![Ruff](https://img.shields.io/badge/lint-ruff-D7FF64?logo=ruff&logoColor=black)
 ![mypy](https://img.shields.io/badge/types-mypy%20--strict-2A6DB2)
+![Code licence](https://img.shields.io/badge/code-MIT-green)
 ![Data licence](https://img.shields.io/badge/data-CC%20BY--NC--SA%204.0%20%7C%20CC%20BY%204.0-lightgrey)
 
 <img src="docs/images/01-executive-command-center.jpg" alt="Executive Command Center dashboard" width="100%">
@@ -432,6 +433,7 @@ If this project is useful to you, a ⭐ is appreciated.
 
 ## 📄 Licence & Data Attribution
 
+- **Code**: [MIT License](LICENSE), © 2026 Nishant Tyagi. The MIT licence covers the code only; the datasets keep their own licences below.
 - **Olist Brazilian E-Commerce** by Olist, [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). It may be used **for non-commercial purposes only**, and derivatives must be shared alike.
 - **Online Retail II** by Daqing Chen, UCI Machine Learning Repository, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - This repository is a non-commercial portfolio project. Dashboard screenshots contain figures derived from the datasets above.
