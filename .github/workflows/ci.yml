@@ -21,7 +21,8 @@ jobs:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: "5432"
       POSTGRES_DB: enterprise360_ci
-      E360_TEST_DB: enterprise360_ci     # CI DB is disposable; tests load fixtures into it
+      # Destructive integration tests need a dedicated DB, distinct from POSTGRES_DB (the test guard refuses the main one).
+      E360_TEST_DB: enterprise360_ci_test
       POSTGRES_USER: e360_app
       POSTGRES_PASSWORD: ci-only-password
       E360_OLIST_DIR: tests/fixtures/olist
@@ -51,5 +52,9 @@ jobs:
         run: |
           python -m orchestration.dbt_runner deps
           python -m orchestration.dbt_runner build
+      - name: Create dedicated test database
+        env:
+          PGPASSWORD: ci-only-password
+        run: psql -h localhost -U e360_app -d enterprise360_ci -v ON_ERROR_STOP=1 -c "create database enterprise360_ci_test"
       - name: Pytest (unit + integration)
         run: python -m pytest
