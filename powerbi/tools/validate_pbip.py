@@ -109,6 +109,7 @@ def cross_refs(model_json: Path) -> int:
     errors += report_refs()
     errors += rls_safety(m)
     errors += domain_separation(m)
+    errors += query_consistency(m)
     n_vis = 0
     for vf in sorted((ROOT / "Enterprise360.Report").rglob("visual.json")):
         n_vis += 1
@@ -121,6 +122,42 @@ def cross_refs(model_json: Path) -> int:
             elif kind == "Column" and (ent, prop) in hidden:
                 print(f"WARN {vf.parent.name}: hidden column {ent}.{prop} used")
     print(f"cross-reference: {len(m['relationships'])} relationships, {len(meas)} measures, {n_vis} visuals checked, {errors} errors")
+    return errors
+
+
+def query_consistency(m: dict) -> int:
+    """Guards against Desktop's 'pending changes in your queries' banner: the Power Query document Desktop
+    rebuilds from the model must match the model exactly (query list, result types, annotations)."""
+    errors = 0
+    ann = {a["name"]: a["value"] for a in m.get("annotations", [])}
+    order = json.loads(ann.get("PBI_QueryOrder", "[]"))
+    m_tables = [t for t in m["tables"] if any(p_.get("source", {}).get("type") == "m" for p_ in t.get("partitions", []))]
+    expected = [e["name"] for e in m.get("expressions", [])] + [t["name"] for t in m_tables]
+    if len(order) != len(set(order)):
+        print("FAIL PBI_QueryOrder has duplicates"); errors += 1
+    for q_ in set(expected) - set(order):
+        print(f"FAIL PBI_QueryOrder missing query {q_}"); errors += 1
+    for q_ in set(order) - set(expected):
+        print(f"FAIL PBI_QueryOrder lists unknown query {q_}"); errors += 1
+    for t in m_tables:
+        tann = {a["name"]: a["value"] for a in t.get("annotations", [])}
+        src = "\n".join(p_["source"]["expression"] if isinstance(p_["source"]["expression"], str) else "\n".join(p_["source"]["expression"])
+                        for p_ in t["partitions"])
+        if tann.get("PBI_ResultType") != "Table":
+            print(f"FAIL table {t['name']}: missing annotation PBI_ResultType = Table"); errors += 1
+        if "Item =" in src and tann.get("PBI_NavigationStepName") != "Navigation":
+            print(f"FAIL table {t['name']}: missing annotation PBI_NavigationStepName = Navigation"); errors += 1
+        for c in t.get("columns", []):
+            if c.get("type") != "calculated" and c.get("dataType") == "decimal" and "Currency.Type" not in src:
+                print(f"FAIL {t['name']}[{c['name']}]: dataType decimal but M returns type number (Desktop maps to double)"); errors += 1
+    for e in m.get("expressions", []):
+        if (e.get("kind") or "m") == "m" and "IsParameterQuery" in str(e.get("expression")):
+            if not any(a["name"] == "PBI_ResultType" for a in e.get("annotations", [])) or not e.get("lineageTag"):
+                print(f"FAIL parameter {e['name']}: missing PBI_ResultType annotation or lineageTag"); errors += 1
+    for stale in ("unappliedChanges.json", "cache.abf"):
+        for f in ROOT.rglob(f".pbi/{stale}"):
+            print(f"FAIL {f.relative_to(ROOT)} present: remove it (stale Desktop state)"); errors += 1
+    print(f"query-consistency: {len(order)} queries in PBI_QueryOrder, {len(m_tables)} M tables, {errors} errors")
     return errors
 
 

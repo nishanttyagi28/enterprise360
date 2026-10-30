@@ -63,7 +63,7 @@
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#111A2E'"
+                      "Value": "'#FFFFFF'"
                     }
                   }
                 }
@@ -94,7 +94,7 @@
                 "color": {
                   "expr": {
                     "Literal": {
-                      "Value": "'#1F2A44'"
+                      "Value": "'#E5E7EB'"
                     }
                   }
                 }
@@ -103,7 +103,14 @@
             "radius": {
               "expr": {
                 "Literal": {
-                  "Value": "8D"
+                  "Value": "4D"
+                }
+              }
+            },
+            "width": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
                 }
               }
             }

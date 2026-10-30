@@ -36,7 +36,7 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
-	/// KPI_NET_GMV (DERIVED): DERIVED supporting measure for KPI_NET_GMV: GMV of canceled/unavailable orders (GMV - Net GMV). Shown on a secondary axis because the gap is about 0.7% of GMV.
+	/// KPI_NET_GMV (SUPPORTED): Supporting measure (breakdown) under KPI_NET_GMV: GMV of canceled or unavailable orders (not returns) = [GMV] - [Net GMV]. About 0.715% of GMV overall; shown as a trend on a secondary axis, not a KPI.
 	measure 'GMV Excluded from Net' = [GMV] - [Net GMV]
 		formatString: R$ #,0
 		displayFolder: Sales
@@ -44,7 +44,9 @@ table _Measures
 
 		annotation KPI_Id = KPI_NET_GMV
 
-		annotation KPI_Status = DERIVED
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = breakdown
 
 	/// KPI_FREIGHT (SUPPORTED): Freight charged to customers (customer freight, not logistics cost).
 	measure 'Freight Value' = SUM ( 'Order Item'[freight_value] )
@@ -66,7 +68,7 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
-	/// KPI_GMV_GROWTH (PARTIAL): Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank or when the current or prior month is not complete (dim_date.is_complete_month = false). Also BLANK when the current or prior month is not a reporting month (dim_date.is_reporting_month = false; stricter than kpis.yaml, which names is_complete_month and says is_reporting_month governs the default report range). PARTIAL: first/last coverage months are partial and sparse.
+	/// KPI_GMV_GROWTH (PARTIAL): Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank or when the current or prior month is not complete (dim_date.is_complete_month = false). Also BLANK when the current or prior month is not a reporting month (dim_date.is_reporting_month = false; KPI_GMV_GROWTH v1.2.0 requires is_complete_month AND is_reporting_month for both months). PARTIAL: first/last coverage months are partial and sparse.
 	measure 'GMV Growth %' =
 			VAR _current = [GMV]
 			VAR _previous = CALCULATE ( [GMV], DATEADD ( 'Date'[Date], -1, MONTH ) )
@@ -581,10 +583,10 @@ table _Measures
 				CALCULATE (
 					SWITCH (
 						SELECTEDVALUE ( 'DQ Results'[Status] ),
-						"pass", "#10B981",
-						"warn", "#F59E0B",
-						"fail", "#EF4444",
-						"#64748B"
+						"pass", "#D1FAE5",
+						"warn", "#FEF3C7",
+						"fail", "#FEE2E2",
+						"#F3F4F6"
 					),
 					REMOVEFILTERS ( 'DQ Run Summary' ),
 					REMOVEFILTERS ( 'DQ Results'[Run ID] ),

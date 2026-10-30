@@ -40,4 +40,6 @@ table Geography
 				in
 					Expanded
 
+	annotation PBI_NavigationStepName = Navigation
+
 	annotation PBI_ResultType = Table

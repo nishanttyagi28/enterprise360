@@ -103,8 +103,8 @@ TABLES: list[dict] = [
             ("order_item_id", "order_item_id", "int64", KEY),
             ("product_sk", "product_sk", "string", KEY),
             ("seller_sk", "seller_sk", "string", KEY),
-            ("item_price", "item_price", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
-            ("freight_value", "freight_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("item_price", "item_price", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("freight_value", "freight_value", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
             ("Shipping Limit At", "shipping_limit_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
             ("is_handover_on_time", "is_handover_on_time", "boolean", {"hidden": True, "summarize": "none"}),
         ],
@@ -121,7 +121,7 @@ TABLES: list[dict] = [
             ("Approved At", "approved_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
             ("hours_to_approve", "hours_to_approve", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.0"}),
             ("Review Score", "latest_review_score", "int64", {"summarize": "none"}),
-            ("payment_vs_items_diff", "payment_vs_items_diff", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+            ("payment_vs_items_diff", "payment_vs_items_diff", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
             ("has_items", "has_items", "boolean", {"hidden": True, "summarize": "none"}),
             ("has_payment", "has_payment", "boolean", {"hidden": True, "summarize": "none"}),
         ],
@@ -134,7 +134,7 @@ TABLES: list[dict] = [
             ("payment_sequential", "payment_sequential", "int64", KEY),
             ("Payment Type", "payment_type", "string", {"summarize": "none"}),
             ("Payment Installments", "payment_installments", "int64", {"summarize": "none"}),
-            ("payment_value", "payment_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("payment_value", "payment_value", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
         ],
     },
     {
@@ -299,7 +299,7 @@ UCI_TABLES: list[dict] = [
          ("uci_customer_sk", "uci_customer_sk", "string", KEY),
          ("uci_country_sk", "uci_country_sk", "string", KEY),
          ("invoice_date_key", "invoice_date_key", "int64", KEY),
-         ("line_value", "line_value", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+         ("line_value", "line_value", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
          ("quantity", "quantity", "int64", {"hidden": True, "summarize": "none"}),
          ("is_cancellation", "is_cancellation", "boolean", {"hidden": True, "summarize": "none"}),
          ("is_product_line", "is_product_line", "boolean", {"hidden": True, "summarize": "none"}),
@@ -379,7 +379,7 @@ UCI_TABLES: list[dict] = [
          ("M Score", "m_score", "int64", {"summarize": "none"}),
          ("Recency Days", "recency_days", "int64", {"summarize": "none"}),
          ("Frequency", "frequency", "int64", {"summarize": "none"}),
-         ("monetary_net_sales_proxy_gbp", "monetary_net_sales_proxy_gbp", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+         ("monetary_net_sales_proxy_gbp", "monetary_net_sales_proxy_gbp", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
      ]},
 ]
 TABLES.extend(UCI_TABLES)
@@ -469,6 +469,7 @@ growth_cond = "ISBLANK ( _current ) || ISBLANK ( _previous ) || _previous = 0" +
 growth += ["RETURN", f"    IF ( {growth_cond}, BLANK (), DIVIDE ( _current - _previous, _previous ) )"]
 
 HIDDEN_MEASURES = {"DQ Status Colour"}
+SUPPORT_KIND = {"GMV Excluded from Net": "breakdown", "UCI Lines Without Customer ID %": "dq_exclusion"}
 MM = "KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 )"
 ELIG = "KEEPFILTERS ( 'Delivery'[is_otd_eligible] = TRUE () )"
 MEASURES = [
@@ -480,8 +481,8 @@ MEASURES = [
     ("Sales", "Net GMV", "KPI_NET_GMV", "SUPPORTED", BRL,
      ["CALCULATE (", "    [GMV],", "    KEEPFILTERS ( NOT 'Order'[order_status] IN { \"canceled\", \"unavailable\" } )", ")"],
      "GMV of orders not canceled/unavailable."),
-    ("Sales", "GMV Excluded from Net", "KPI_NET_GMV", "DERIVED", BRL, ["[GMV] - [Net GMV]"],
-     "DERIVED supporting measure for KPI_NET_GMV: GMV of canceled/unavailable orders (GMV - Net GMV). Shown on a secondary axis because the gap is about 0.7% of GMV."),
+    ("Sales", "GMV Excluded from Net", "KPI_NET_GMV", "SUPPORTED", BRL, ["[GMV] - [Net GMV]"],
+     "Supporting measure (breakdown) under KPI_NET_GMV: GMV of canceled or unavailable orders (not returns) = [GMV] - [Net GMV]. About 0.715% of GMV overall; shown as a trend on a secondary axis, not a KPI."),
     ("Sales", "Freight Value", "KPI_FREIGHT", "SUPPORTED", BRL, ["SUM ( 'Order Item'[freight_value] )"],
      "Freight charged to customers (customer freight, not logistics cost)."),
     ("Sales", "Freight Share %", "KPI_FREIGHT_SHARE", "SUPPORTED", PCT, ["DIVIDE ( [Freight Value], [GMV] )"],
@@ -489,7 +490,7 @@ MEASURES = [
     ("Sales", "GMV Growth %", "KPI_GMV_GROWTH", "PARTIAL", PCT, growth,
      "Month-over-month GMV growth on calendar months by purchase date (evaluate at Year Month). BLANK when prior GMV is 0/blank"
      + (" or when the current or prior month is not complete (dim_date.is_complete_month = false)." if DATE_COMPLETE_FLAG_COLUMN else "; partial-month suppression disabled.")
-     + " Also BLANK when the current or prior month is not a reporting month (dim_date.is_reporting_month = false; stricter than kpis.yaml, which names is_complete_month and says is_reporting_month governs the default report range)."
+     + " Also BLANK when the current or prior month is not a reporting month (dim_date.is_reporting_month = false; KPI_GMV_GROWTH v1.2.0 requires is_complete_month AND is_reporting_month for both months)."
      + " PARTIAL: first/last coverage months are partial and sparse."),
     ("Payments", "Payment Value", "KPI_PAYMENT_VALUE", "SUPPORTED", BRL, ["SUM ( 'Payment'[payment_value] )"],
      "Sum of recorded payments. Transaction value, not sales, not cash flow; does not reconcile to items+freight for some orders."),
@@ -593,8 +594,8 @@ MEASURES = [
      latest_run(["SUM ( 'DQ Results'[failing_rows] )"]),
      "Supporting measure: sum of failing_rows in the latest (or selected) run."),
     ("Data Quality", "DQ Status Colour", "KPI_DQ_SCORE", "SUPPORTED", "",
-     latest_run(["SWITCH (", "    SELECTEDVALUE ( 'DQ Results'[Status] ),", "    \"pass\", \"#10B981\",",
-                 "    \"warn\", \"#F59E0B\",", "    \"fail\", \"#EF4444\",", "    \"#64748B\"", ")"]),
+     latest_run(["SWITCH (", "    SELECTEDVALUE ( 'DQ Results'[Status] ),", "    \"pass\", \"#D1FAE5\",",
+                 "    \"warn\", \"#FEF3C7\",", "    \"fail\", \"#FEE2E2\",", "    \"#F3F4F6\"", ")"]),
      "Formatting helper only (not a KPI): hex status colour for conditional formatting of the checks table. Hidden."),
     ("Data Quality", "Payment Mismatch Orders", "KPI_PAYMENT_VALUE", "SUPPORTED", INT,
      ["CALCULATE ( COUNTROWS ( 'Order' ), KEEPFILTERS ( ABS ( 'Order'[payment_vs_items_diff] ) > 0.01 ) )"],
@@ -681,9 +682,9 @@ UCI_MEASURES = [
       "        KEEPFILTERS ( 'UCI Customer'[First Purchase Month] >= DATE ( YEAR ( _start ), MONTH ( _start ), 1 ) && 'UCI Customer'[First Purchase Month] <= _end )",
       "    )"],
      "Identified customers whose first purchase month falls in the period. 2009-12 overstated (dataset start, no prior history)."),
-    (f"{UF}\\Customers", "UCI Lines Without Customer ID %", "DERIVED", "DERIVED", "0.0%",
+    (f"{UF}\\Customers", "UCI Lines Without Customer ID %", "KPI_UCI_ACTIVE_CUSTOMERS", "SUPPORTED", "0.0%",
      ["DIVIDE (", f"    CALCULATE ( COUNTROWS ( {L_} ), KEEPFILTERS ( {L_}[has_customer] = FALSE () ) ),", f"    COUNTROWS ( {L_} )", ")"],
-     "DERIVED (project-lead approved; no customer-coverage KPI id in kpis.yaml): share of UCI invoice lines without a Customer ID (has_customer = FALSE, mapped to unknown customer -1) over all lines. Shown alongside KPI_UCI_ACTIVE_CUSTOMERS / KPI_UCI_NEW_CUSTOMERS / KPI_UCI_REPEAT_RATE / KPI_UCI_RETENTION, which count identified customers only. Full coverage = 22.76% (235,151 of 1,033,036)."),
+     "Supporting measure (dq_exclusion) under KPI_UCI_ACTIVE_CUSTOMERS: share of UCI invoice lines without a Customer ID (has_customer = FALSE, mapped to unknown customer -1) over all lines. Shown alongside KPI_UCI_ACTIVE_CUSTOMERS / KPI_UCI_NEW_CUSTOMERS / KPI_UCI_REPEAT_RATE / KPI_UCI_RETENTION, which count identified customers only. Full coverage = 22.76% (235,151 of 1,033,036)."),
     (f"{UF}\\Customers", "UCI Repeat Rate %", "KPI_UCI_REPEAT_RATE", "SUPPORTED", "0.0%",
      ["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ), KEEPFILTERS ( 'UCI Customer'[is_repeat_customer] = TRUE () ) ),",
       "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ) )", ")"],
@@ -768,6 +769,8 @@ def build_table(t: dict) -> str:
     out.append("\t\tsource =")
     out.append(tmdl_expr(m, 4))
     out.append("")
+    out.append("\tannotation PBI_NavigationStepName = Navigation")
+    out.append("")
     out.append("\tannotation PBI_ResultType = Table")
     out.append("")
     return "\n".join(out)
@@ -794,6 +797,9 @@ def build_measures_table(tname: str = "_Measures", measures: list | None = None,
         out.append(f"\t\tannotation KPI_Id = {kid}")
         out.append("")
         out.append(f"\t\tannotation KPI_Status = {status}")
+        if name in SUPPORT_KIND:
+            out.append("")
+            out.append(f"\t\tannotation KPI_SupportingKind = {SUPPORT_KIND[name]}")
         out.append("")
     out += ["\tcolumn Value", "\t\tdataType: string", "\t\tisHidden", f"\t\tlineageTag: {gid('col', tname, 'Value')}",
             "\t\tsummarizeBy: none", "\t\tsourceColumn: Value", "", "\t\tannotation SummarizationSetBy = Automatic", "",
@@ -834,10 +840,12 @@ def build_model() -> None:
                                     "version": "4.2", "settings": {}})
     write(d / "database.tmdl", "database\n\tcompatibilityLevel: 1567\n\n")
     all_tables = [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE, "Time Intelligence"]
+    # Desktop lists EVERY Power Query query (parameters + every M-partition table) in PBI_QueryOrder.
+    QUERY_ORDER = ["PgServer", "PgDatabase", "PgSchema", "PgSchemaUci", "PgSchemaUciMarts"] + [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE]
     model = ["model Model", "\tculture: en-US", "\tdefaultPowerBIDataSourceVersion: powerBI_V3",
              "\tdiscourageImplicitMeasures", "\tsourceQueryCulture: en-US", "\tdataAccessOptions",
              "\t\tlegacyRedirects", "\t\treturnErrorValuesAsNull", "",
-             'annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema","PgSchemaUci","PgSchemaUciMarts"]', "",
+             "annotation PBI_QueryOrder = " + json.dumps(QUERY_ORDER, ensure_ascii=False, separators=(",", ":")), "",
              "annotation __PBI_TimeIntelligenceEnabled = 0", "",
              "annotation PBI_ProTooling = [\"DevMode\"]", ""]
     model += [f"ref table {q(n)}" for n in all_tables] + [""] + [f"ref role {q(r[0])}" for r in ROLES] + ["", "ref cultureInfo en-US", ""]
@@ -911,7 +919,12 @@ M = "_Measures"
 PARTIAL_GROWTH = "Partial: 2016 and late-2018 coverage incomplete"
 PARTIAL_RETENTION = "Partial: low repeat base; 2016/late-2018 incomplete"
 PARTIAL_HANDOVER = "Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time."
-AMBER = "#F59E0B"
+AMBER = "#B45309"  # PARTIAL caveat subtitles: amber-700, 5.02:1 on white
+# ---- Light design system (WCAG AA on white): primary 14.68:1, secondary 7.56:1, muted 4.83:1
+C_BG, C_CARD, C_BORDER = "#FFFFFF", "#FFFFFF", "#E5E7EB"
+C_TEXT, C_TEXT2, C_MUTED = "#1F2937", "#4B5563", "#6B7280"
+C_ACCENT_TEXT, C_ACCENT_LINE = "#0E7490", "#2563EB"  # cyan-700 5.36:1, blue-600 5.17:1
+C_GRID, C_SUBTLE = "#E5E7EB", "#F3F4F6"
 OLIST_REPORTING_ONLY = [("Date", "is_reporting_month", True)]  # excludes 2016-09..12 and 2018-09/10 partial or sparse months
 
 
@@ -945,11 +958,11 @@ class Page:
             v["objects"] = objects
         vco: dict = {}
         if card:
-            vco["background"] = [{"properties": {"show": lit(True), "color": color("#111A2E"), "transparency": lit(0)}}]
-            vco["border"] = [{"properties": {"show": lit(True), "color": color("#1F2A44"), "radius": lit(8)}}]
+            vco["background"] = [{"properties": {"show": lit(True), "color": color(C_CARD), "transparency": lit(0)}}]
+            vco["border"] = [{"properties": {"show": lit(True), "color": color(C_BORDER), "radius": lit(4), "width": lit(1)}}]
             vco["dropShadow"] = [{"properties": {"show": lit(False)}}]
         if title:
-            vco["title"] = [{"properties": {"show": lit(True), "text": lit(title), "fontColor": color("#E5E7EB")}}]
+            vco["title"] = [{"properties": {"show": lit(True), "text": lit(title), "fontColor": color(C_TEXT)}}]
         else:
             vco["title"] = [{"properties": {"show": lit(False)}}]
         if subtitle:
@@ -980,9 +993,9 @@ class Page:
         return name
 
 
-CARD_OBJ = {"labels": [{"properties": {"color": color("#22D3EE"), "fontSize": lit(22)}}],
+CARD_OBJ = {"labels": [{"properties": {"color": color(C_ACCENT_TEXT), "fontSize": lit(22)}}],
             "categoryLabels": [{"properties": {"show": lit(False)}}]}
-SMALL_CARD_OBJ = {"labels": [{"properties": {"color": color("#22D3EE"), "fontSize": lit(16)}}],
+SMALL_CARD_OBJ = {"labels": [{"properties": {"color": color(C_ACCENT_TEXT), "fontSize": lit(16)}}],
                   "categoryLabels": [{"properties": {"show": lit(False)}}]}
 SLICER_OBJ = {"data": [{"properties": {"mode": lit("Between")}}]}
 TOOLTIP_CATEGORY, TOOLTIP_STATE = "tooltip-category", "tooltip-state"
@@ -1355,33 +1368,73 @@ for tid, display, field in ((TOOLTIP_CATEGORY, "Tooltip - Category", ("Product",
                {"Values": [("m", M, meas)]}, title, objects=SMALL_CARD_OBJ)
     PAGES.append(tp)
 
-THEME_NAME = "Enterprise360Dark"
+THEME_NAME = "Enterprise360Light"
+_sol = lambda c: {"solid": {"color": c}}
 THEME = {
     "$schema": "https://raw.githubusercontent.com/microsoft/powerbi-desktop-samples/main/Report%20Theme%20JSON%20Schema/reportThemeSchema-2.159.json",
     "name": THEME_NAME,
-    "dataColors": ["#22D3EE", "#3B82F6", "#818CF8", "#2DD4BF", "#60A5FA", "#A78BFA", "#94A3B8", "#F59E0B"],
-    "foreground": "#E5E7EB", "foregroundNeutralSecondary": "#94A3B8", "foregroundNeutralTertiary": "#64748B",
-    "background": "#0B1220", "secondaryBackground": "#111A2E", "backgroundLight": "#1F2A44",
-    "backgroundNeutral": "#1F2A44", "tableAccent": "#22D3EE", "accent": "#22D3EE",
-    "good": "#10B981", "neutral": "#F59E0B", "bad": "#EF4444",
-    "maximum": "#22D3EE", "center": "#3B82F6", "minimum": "#1E3A8A", "null": "#64748B",
-    "hyperlink": "#22D3EE", "visitedHyperlink": "#60A5FA",
+    # same hue family as before (cyan/blue/indigo/teal/violet/slate/amber), darkened for white backgrounds
+    "dataColors": ["#0891B2", "#2563EB", "#6366F1", "#0D9488", "#3B82F6", "#8B5CF6", "#64748B", "#D97706"],
+    "foreground": C_TEXT, "foregroundNeutralSecondary": C_TEXT2, "foregroundNeutralTertiary": C_MUTED,
+    "background": C_BG, "secondaryBackground": C_SUBTLE, "backgroundLight": "#F8FAFC",
+    "backgroundNeutral": C_BORDER, "tableAccent": C_ACCENT_TEXT, "accent": C_ACCENT_TEXT,
+    "good": "#047857", "neutral": AMBER, "bad": "#B91C1C",
+    "maximum": "#0E7490", "center": "#67E8F9", "minimum": "#ECFEFF", "null": "#9CA3AF",
+    "hyperlink": C_ACCENT_LINE, "visitedHyperlink": "#1D4ED8",
     "textClasses": {
-        "callout": {"fontSize": 22, "fontFace": "Segoe UI Semibold", "color": "#22D3EE"},
-        "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#E5E7EB"},
-        "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": "#E5E7EB"},
-        "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": "#94A3B8"},
+        "callout": {"fontSize": 22, "fontFace": "Segoe UI Semibold", "color": C_ACCENT_TEXT},
+        "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": C_TEXT},
+        "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": C_TEXT},
+        "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": C_TEXT2},
     },
     "visualStyles": {
-        "page": {"*": {"background": [{"color": {"solid": {"color": "#0B1220"}}, "transparency": 0}],
-                       "outspace": [{"color": {"solid": {"color": "#0B1220"}}}]}},
-        "*": {"*": {"title": [{"fontColor": {"solid": {"color": "#E5E7EB"}}, "fontSize": 11}],
-                    "visualHeader": [{"background": {"solid": {"color": "#111A2E"}},
-                                      "foreground": {"solid": {"color": "#94A3B8"}}}]}},
-        "actionButton": {"*": {"fill": [{"show": True, "fillColor": {"solid": {"color": "#1F2A44"}}}],
-                               "text": [{"fontColor": {"solid": {"color": "#E5E7EB"}}}]}},
-        "pageNavigator": {"*": {"fill": [{"show": True, "fillColor": {"solid": {"color": "#111A2E"}}}],
-                                "text": [{"fontColor": {"solid": {"color": "#94A3B8"}}}]}},
+        "page": {"*": {"background": [{"color": _sol(C_BG), "transparency": 0}],
+                       "outspace": [{"color": _sol(C_BG), "transparency": 0}]}},
+        "*": {"*": {
+            "title": [{"fontColor": _sol(C_TEXT), "fontSize": 11}],
+            "subTitle": [{"fontColor": _sol(C_TEXT2)}],
+            "background": [{"show": True, "color": _sol(C_CARD), "transparency": 0}],
+            "border": [{"show": True, "color": _sol(C_BORDER), "radius": 4, "width": 1}],
+            "dropShadow": [{"show": False}],
+            "visualHeader": [{"background": _sol(C_CARD), "foreground": _sol(C_TEXT2), "border": _sol(C_BORDER)}],
+            "categoryAxis": [{"labelColor": _sol(C_TEXT2), "titleColor": _sol(C_TEXT2), "gridlineColor": _sol(C_GRID)}],
+            "valueAxis": [{"labelColor": _sol(C_TEXT2), "titleColor": _sol(C_TEXT2), "gridlineColor": _sol(C_GRID)}],
+            "legend": [{"labelColor": _sol(C_TEXT2), "titleColor": _sol(C_TEXT2)}],
+            "labels": [{"color": _sol(C_TEXT)}],
+        }},
+        "tableEx": {"*": {"columnHeaders": [{"fontColor": _sol(C_TEXT), "backColor": _sol(C_SUBTLE)}],
+                          "values": [{"fontColorPrimary": _sol(C_TEXT), "backColorPrimary": _sol(C_CARD),
+                                      "fontColorSecondary": _sol(C_TEXT), "backColorSecondary": _sol("#F8FAFC")}],
+                          "total": [{"fontColor": _sol(C_TEXT), "backColor": _sol(C_SUBTLE)}],
+                          "grid": [{"gridHorizontalColor": _sol(C_GRID), "gridVerticalColor": _sol(C_GRID), "outlineColor": _sol(C_BORDER)}]}},
+        "pivotTable": {"*": {"columnHeaders": [{"fontColor": _sol(C_TEXT), "backColor": _sol(C_SUBTLE)}],
+                             "rowHeaders": [{"fontColor": _sol(C_TEXT), "backColor": _sol(C_CARD)}],
+                             "values": [{"fontColorPrimary": _sol(C_TEXT), "backColorPrimary": _sol(C_CARD),
+                                         "fontColorSecondary": _sol(C_TEXT), "backColorSecondary": _sol("#F8FAFC")}],
+                             "grid": [{"gridHorizontalColor": _sol(C_GRID), "gridVerticalColor": _sol(C_GRID), "outlineColor": _sol(C_BORDER)}]}},
+        "slicer": {"*": {"header": [{"fontColor": _sol(C_TEXT), "background": _sol(C_CARD)}],
+                         "items": [{"fontColor": _sol(C_TEXT), "background": _sol(C_CARD)}],
+                         "date": [{"fontColor": _sol(C_TEXT), "background": _sol(C_CARD)}],
+                         "numericInputStyle": [{"fontColor": _sol(C_TEXT), "background": _sol(C_CARD)}],
+                         "slider": [{"color": _sol(C_ACCENT_LINE)}]}},
+        "card": {"*": {"labels": [{"color": _sol(C_ACCENT_TEXT)}], "categoryLabels": [{"color": _sol(C_TEXT2)}]}},
+        "multiRowCard": {"*": {"dataLabels": [{"color": _sol(C_TEXT)}], "categoryLabels": [{"color": _sol(C_TEXT2)}]}},
+        "actionButton": {"*": {
+            "fill": [{"$id": "default", "show": True, "fillColor": _sol(C_SUBTLE), "transparency": 0},
+                     {"$id": "hover", "show": True, "fillColor": _sol(C_BORDER), "transparency": 0},
+                     {"$id": "selected", "show": True, "fillColor": _sol(C_ACCENT_TEXT), "transparency": 0}],
+            "text": [{"$id": "default", "fontColor": _sol(C_TEXT)}, {"$id": "hover", "fontColor": _sol(C_TEXT)},
+                     {"$id": "selected", "fontColor": _sol("#FFFFFF")}],
+            "icon": [{"$id": "default", "lineColor": _sol(C_TEXT)}, {"$id": "hover", "lineColor": _sol(C_TEXT)},
+                     {"$id": "selected", "lineColor": _sol("#FFFFFF")}],
+            "outline": [{"$id": "default", "show": True, "lineColor": _sol(C_BORDER)}]}},
+        "pageNavigator": {"*": {
+            "fill": [{"$id": "default", "show": True, "fillColor": _sol(C_CARD), "transparency": 0},
+                     {"$id": "hover", "show": True, "fillColor": _sol(C_SUBTLE), "transparency": 0},
+                     {"$id": "selected", "show": True, "fillColor": _sol(C_ACCENT_TEXT), "transparency": 0}],
+            "text": [{"$id": "default", "fontColor": _sol(C_TEXT)}, {"$id": "hover", "fontColor": _sol(C_TEXT)},
+                     {"$id": "selected", "fontColor": _sol("#FFFFFF")}],
+            "outline": [{"$id": "default", "show": True, "lineColor": _sol(C_BORDER)}]}},
     },
 }
 
@@ -1424,8 +1477,8 @@ def build_report() -> None:
                                                    "fieldExpr": fld("c", ent, prop)}]}
         elif pg.ptype == "Tooltip":
             page["pageBinding"] = {"name": hid("binding", pg.pid), "type": "Tooltip"}
-        page["objects"] = {"background": [{"properties": {"color": color("#0B1220"), "transparency": lit(0)}}],
-                           "outspace": [{"properties": {"color": color("#0B1220")}}]}
+        page["objects"] = {"background": [{"properties": {"color": color(C_BG), "transparency": lit(0)}}],
+                           "outspace": [{"properties": {"color": color(C_BG), "transparency": lit(0)}}]}
         if pg.ptype:
             page["type"] = pg.ptype
         if pg.hidden:

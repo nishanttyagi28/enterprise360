@@ -15,7 +15,7 @@ powerbi/
 │   ├── definition.pbir                     # byPath ../Enterprise360.SemanticModel
 │   ├── definition/  version.json · report.json · pages/pages.json · pages/<id>/page.json · pages/<id>/visuals/<id>/visual.json
 │   │                bookmarks/bookmarks.json · bookmarks/<id>.bookmark.json
-│   └── StaticResources/RegisteredResources/Enterprise360Dark.json   # theme
+│   └── StaticResources/RegisteredResources/Enterprise360Light.json  # theme (light)
 └── tools/
     ├── build_pbip.py                       # deterministic generator (source of truth for this first cut)
     └── validate_pbip.py                    # JSON-schema + cross-reference validator
@@ -125,7 +125,7 @@ Locked KPI & Quality definitions, as implemented:
 - **Repeat Purchase Rate %**: 2+ distinct orders within the selected period. Visual titles say "within selected period".
 - **Delivery KPIs, including Avg Delivery Days**: only `is_otd_eligible = true`.
 
-## Report pages (1280×720, dark theme; page navigator on every page lists all visible pages)
+## Report pages (1280×720, light theme; page navigator on every page lists all visible pages)
 | Page | Content |
 |---|---|
 | Executive Command Center | purchase-date slicer; 5 cards (GMV, Orders, AOV, Avg Review Score, OTD %); **bookmark buttons "Executive view" / "Detail view"**. Executive view shows the GMV vs Net GMV trend, GMV by state, top categories, and GMV Growth % (partial caveat). Detail view shows a monthly scorecard table |
@@ -169,6 +169,52 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - **`dim_date.is_complete_month`**: now in dbt and wired in (see GMV Growth %).
 - **Seller handover (KPI_SELLER_HANDOVER_OTD, PARTIAL).** `[Seller Handover On-Time %]` = items handed to the carrier (`fct_deliveries.delivered_carrier_at`) at or before the item's `shipping_limit_at` / items with both timestamps. It is a **full timestamp** comparison, now computed in dbt as `core.fct_order_items.is_handover_on_time`. The model loads that source column, and the earlier calculated column was dropped. `shipping_limit_at` is **Olist's seller shipping deadline, not a contractual SLA**. Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time. This caveat appears on every visual that shows the measure: the Operations & Delivery card and the seller-state chart. `[Handover Missing Timestamp]` (DQ exclusion count) is shown on the Data Quality page. Target and benchmark: to be set by owner.
 - dbt surrogate keys are md5 text; `date_key` is an integer yyyymmdd.
+
+## Design system (light theme, `Enterprise360Light.json`)
+
+Every page, including the drill-through and tooltip pages, has a white page and wallpaper (#FFFFFF, transparency 0). Visuals are white cards with a 1px #E5E7EB border, radius 4, and no shadow. Gridlines are #E5E7EB, and table and matrix headers are #F3F4F6.
+
+Contrast ratios on white (WCAG AA body text needs 4.5:1 or more):
+
+| Use | Colour | Ratio |
+|---|---|---|
+| Primary text (titles, values, table text, slicer items) | #1F2937 | 14.68:1 |
+| Secondary text (axes, legends, category labels) | #4B5563 | 7.56:1 |
+| Muted text | #6B7280 | 4.83:1 |
+| Card callouts, accent text (cyan-700) | #0E7490 | 5.36:1 |
+| Accent lines and links (blue-600) | #2563EB | 5.17:1 |
+| PARTIAL caveat subtitles (amber-700) | #B45309 | 5.02:1 |
+| Good | #047857 | 5.48:1 |
+| Bad | #B91C1C | 6.47:1 |
+| Selected navigator/button state (white on #0E7490) | #FFFFFF | 5.36:1 |
+| Dark text on DQ status tints (pass #D1FAE5 / warn #FEF3C7 / fail #FEE2E2) | #1F2937 | 12.9 / 13.2 / 12.0:1 |
+
+Button and navigator states: default is light grey #F3F4F6 or white with dark text; hover is #E5E7EB; selected is #0E7490 with white text.
+
+The old cyan #22D3EE (1.81:1 on white) is no longer used. The data palette keeps the same hues, made darker: #0891B2, #2563EB, #6366F1, #0D9488, #3B82F6, #8B5CF6, #64748B, #D97706.
+
+## "Pending changes in your queries" banner (fixed in the generator)
+
+Desktop rebuilds its Power Query document from the TMDL and compares it with the model. Three differences found in the generated model could trigger the banner:
+
+1. `PBI_QueryOrder` listed only the 5 parameters, not the 22 table queries. Desktop always lists every query (parameters, then every table with an M partition).
+2. Six PostgreSQL `numeric` columns were declared `dataType: decimal`, but the PostgreSQL connector returns `type number`. Desktop maps `type number` to `double`, so the M output schema did not match the model columns. The affected columns were:
+   - Order Item: item_price, freight_value
+   - Order: payment_vs_items_diff
+   - Payment: payment_value
+   - UCI Invoice Line: line_value
+   - UCI RFM: monetary_net_sales_proxy_gbp
+3. Navigation tables were missing `annotation PBI_NavigationStepName = Navigation`.
+
+These are now `double`, the full query order and the annotations are written, and `validate_pbip.py` runs a `query-consistency` check. The check fails on:
+- a missing or unknown query in PBI_QueryOrder;
+- a `decimal` column on an M table without Currency.Type;
+- a missing PBI_ResultType or PBI_NavigationStepName annotation;
+- any `.pbi/unappliedChanges.json` or `cache.abf` in the project.
+
+All other columns were compared with `information_schema` types and match.
+
+**If the banner persists on a laptop**, a stale `Enterprise360.SemanticModel/.pbi/unappliedChanges.json` from an earlier "Apply later" may be left behind. It is git-ignored, so pulls never remove it. Close Desktop, compare it with the TMDL, delete it, and reopen.
 
 ## Olist reporting-month rule (trend visuals)
 

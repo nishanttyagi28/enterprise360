@@ -74,7 +74,7 @@ table Order
 		annotation SummarizationSetBy = User
 
 	column payment_vs_items_diff
-		dataType: decimal
+		dataType: double
 		isHidden
 		formatString: #,0.00
 		lineageTag: 322d19da-fbc4-5812-afbd-e45ec771603f
@@ -110,5 +110,7 @@ table Order
 					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff", "has_items", "has_payment"})
 				in
 					Selected
+
+	annotation PBI_NavigationStepName = Navigation
 
 	annotation PBI_ResultType = Table

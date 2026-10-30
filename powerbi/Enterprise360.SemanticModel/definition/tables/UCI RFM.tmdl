@@ -52,7 +52,7 @@ table 'UCI RFM'
 		annotation SummarizationSetBy = User
 
 	column monetary_net_sales_proxy_gbp
-		dataType: decimal
+		dataType: double
 		isHidden
 		formatString: #,0.00
 		lineageTag: c1784c1c-80d1-53df-a8aa-7b4fdc4ec8d5
@@ -70,5 +70,7 @@ table 'UCI RFM'
 					Selected = Table.SelectColumns(Data, {"customer_id", "r_score", "f_score", "m_score", "recency_days", "frequency", "monetary_net_sales_proxy_gbp"})
 				in
 					Selected
+
+	annotation PBI_NavigationStepName = Navigation
 
 	annotation PBI_ResultType = Table

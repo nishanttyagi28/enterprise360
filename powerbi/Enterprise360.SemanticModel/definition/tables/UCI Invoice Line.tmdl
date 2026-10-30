@@ -39,7 +39,7 @@ table 'UCI Invoice Line'
 		annotation SummarizationSetBy = User
 
 	column line_value
-		dataType: decimal
+		dataType: double
 		isHidden
 		formatString: #,0.00
 		lineageTag: 11fe86b1-0caa-5002-a12f-f5a341db0abd
@@ -101,5 +101,7 @@ table 'UCI Invoice Line'
 					Selected = Table.SelectColumns(Data, {"uci_product_sk", "uci_customer_sk", "uci_country_sk", "invoice_date_key", "line_value", "quantity", "is_cancellation", "is_product_line", "has_customer", "line_type"})
 				in
 					Selected
+
+	annotation PBI_NavigationStepName = Navigation
 
 	annotation PBI_ResultType = Table
