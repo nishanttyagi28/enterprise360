@@ -1,0 +1,95 @@
+/// marts.mart_gmv_forecast: one row per forecast_month (train|validation|test|forecast). Exploratory; GMV = item price, not revenue. Standalone (own month axis).
+table 'GMV Forecast'
+	lineageTag: ec3835df-ae0b-5422-8731-c64551e35747
+
+	column 'Forecast Month'
+		dataType: dateTime
+		formatString: yyyy-mm
+		lineageTag: 3912cd7f-362f-5c6c-940a-4da896e4716d
+		summarizeBy: none
+		sourceColumn: forecast_month
+
+		annotation SummarizationSetBy = User
+
+	column Split
+		dataType: string
+		lineageTag: be25ff4d-cd98-5508-a864-350635435ef0
+		summarizeBy: none
+		sourceColumn: split
+
+		annotation SummarizationSetBy = User
+
+	column is_forecast
+		dataType: boolean
+		isHidden
+		lineageTag: eaa64bb3-2629-559d-ab4f-aa72bc181d45
+		summarizeBy: none
+		sourceColumn: is_forecast
+
+		annotation SummarizationSetBy = User
+
+	column actual_gmv
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: 4eaef0d3-b18d-59d6-9613-eac9a59dded9
+		summarizeBy: none
+		sourceColumn: actual_gmv
+
+		annotation SummarizationSetBy = User
+
+	column forecast_gmv
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: bc44d5e0-9d6c-5c47-a4ee-52019395446f
+		summarizeBy: none
+		sourceColumn: forecast_gmv
+
+		annotation SummarizationSetBy = User
+
+	column lower_gmv
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: 12d19b16-aab1-5bcf-aa0a-4ad2efe63507
+		summarizeBy: none
+		sourceColumn: lower_gmv
+
+		annotation SummarizationSetBy = User
+
+	column upper_gmv
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: d387238c-0616-5d82-9477-52a33e0059af
+		summarizeBy: none
+		sourceColumn: upper_gmv
+
+		annotation SummarizationSetBy = User
+
+	column baseline_gmv
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: 8e23d271-4391-55c5-8043-db17fad74c92
+		summarizeBy: none
+		sourceColumn: baseline_gmv
+
+		annotation SummarizationSetBy = User
+
+	partition 'GMV Forecast' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast"]}[Data],
+					Selected = Table.SelectColumns(Data, {"forecast_month", "split", "is_forecast", "actual_gmv", "forecast_gmv", "lower_gmv", "upper_gmv", "baseline_gmv"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"forecast_month", type date}}),
+					Money = Table.TransformColumnTypes(Typed, {{"actual_gmv", Currency.Type}, {"forecast_gmv", Currency.Type}, {"lower_gmv", Currency.Type}, {"upper_gmv", Currency.Type}, {"baseline_gmv", Currency.Type}})
+				in
+					Money
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

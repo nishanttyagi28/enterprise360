@@ -170,6 +170,73 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - **Seller handover (KPI_SELLER_HANDOVER_OTD, PARTIAL).** `[Seller Handover On-Time %]` = items handed to the carrier (`fct_deliveries.delivered_carrier_at`) at or before the item's `shipping_limit_at` / items with both timestamps. It is a **full timestamp** comparison, now computed in dbt as `core.fct_order_items.is_handover_on_time`. The model loads that source column, and the earlier calculated column was dropped. `shipping_limit_at` is **Olist's seller shipping deadline, not a contractual SLA**. Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time. This caveat appears on every visual that shows the measure: the Operations & Delivery card and the seller-state chart. `[Handover Missing Timestamp]` (DQ exclusion count) is shown on the Data Quality page. Target and benchmark: to be set by owner.
 - dbt surrogate keys are md5 text; `date_key` is an integer yyyymmdd.
 
+## Forecast & Anomalies (exploratory; kpis.yaml @ ef85a62 KPI_GMV_FORECAST, KPI_GMV_ANOMALY_FLAG, both PARTIAL)
+
+**Sources** (via `PgSchemaMarts`; DE has not committed the SQL yet, so the column names are **provisional**). All three tables are standalone: they have their own month axis and no Date relationship.
+
+| Table | Mart | Notes |
+|---|---|---|
+| GMV Forecast | marts.mart_gmv_forecast | |
+| GMV Forecast Backtest | marts.mart_gmv_forecast_backtest | GMV series only |
+| GMV Anomalies | marts.mart_gmv_anomalies | |
+
+The column-to-source mapping lives in one place, `FC_SRC` in `tools/build_pbip.py`, so a rename is a one-line change. All money columns are decimal with Currency.Type.
+
+**Why standalone:** the marts do carry `month_date_key`, and `dim_date` runs to 2019-12-31, but relating them to Date would put them under the Olist reporting-month trend filter and the purchase-date slicer. Kept standalone, 2018-09..2019-02 is never hidden.
+
+**RLS:** the "State Manager (demo)" role hides all three tables (`FALSE()`), because these are company-wide figures with no state grain.
+
+**Validator:** a new `forecast-rules` check fails if:
+- any measure uses `forecast_gmv` without an `is_forecast` or validation+test filter (train rows are the in-sample fit);
+- anything references or loads `is_anomaly`.
+
+**Measures** (folder `Forecast & Anomalies`):
+- **KPI_GMV_FORECAST**, parent annotation on all:
+  - `[GMV Forecast]` (is_forecast rows)
+  - `[GMV Forecast Lower]`, `[GMV Forecast Upper]` (formatting; kpis.yaml names a single `[GMV Forecast Lower/Upper]`, split into two because DAX needs one value each)
+  - `[GMV Baseline (Naive)]`
+  - `[GMV Forecast Actual]`
+  - `[GMV Backtest Forecast]` (validation and test rows only)
+  - `[Backtest MAE]`, `[Backtest sMAPE %]`, `[Backtest Months]`
+- **KPI_GMV_ANOMALY_FLAG**:
+  - `[GMV Anomaly Months]` (is_gmv_anomaly only)
+  - `[GMV Robust Z]`
+  - `[GMV Anomaly Z Threshold]`
+  - `[Orders Robust Z]` (a separate, labelled orders series)
+
+Only `[GMV Forecast]`, `[GMV Forecast Lower/Upper]`, `[GMV Baseline (Naive)]`, `[GMV Anomaly Months]` and `[GMV Robust Z]` are named in kpis.yaml. **The others need a KPI & Quality listing.**
+
+**Verified by SQL (run 7476f047):**
+- **Backtest, GMV, 3 months per split:**
+
+| Split | holt_damped (model) | naive_last_value (baseline) |
+|---|---|---|
+| Validation | MAE 60,295 / sMAPE 5.80% | MAE 147,948 / sMAPE 16.11% |
+| Test | MAE 287,398 / sMAPE 28.25% | MAE 124,745 / sMAPE 13.37% |
+
+  The model does not beat the baseline on test.
+- **Test actuals below the interval:** all three Jun–Aug 2018 actuals are below the 95% lower bounds — 865,124 < 932,111; 895,507 < 977,905; 854,686 < 1,021,685.
+- **Anomalies:** GMV anomaly months = 0. Nov 2017 GMV z = 2.84 (not flagged); its orders z is 5.60 (orders flag only).
+- **Forecast:** 2018-09..2019-02 = 939,062 … 1,033,841.
+
+**Page:**
+- Label strip: Exploratory | GMV = item price, not revenue | Statistical flags, not confirmed incidents | Monthly grain; day-level events like Black Friday are not detectable.
+- Forecast line chart:
+  - actuals;
+  - backtest forecast (validation and test only; never train);
+  - forward forecast;
+  - lower and upper bounds labelled "95% model-based interval, not a guarantee";
+  - "Naive baseline (last value)".
+- "Backtest, 3 months per split" matrix (model vs baseline: MAE, sMAPE, n months, totals off), with the notes "Model does not beat the naive baseline on the test period" and "test actuals fell below the interval".
+- Robust-z chart against the 3.5 threshold, with the orders series labelled separately.
+- `[GMV Anomaly Months]` card. There is no accuracy headline card and no targets.
+
+**Column notes vs the spec:**
+- `mart_gmv_forecast_backtest` has an extra `series` column (gmv/orders); it is filtered to gmv in M.
+- `smape_pct` is stored in percent units (28.2545), so it is divided by 100.
+- `mart_gmv_forecast` also has `is_anomaly`, `is_orders_anomaly`, orders columns, `interval_level` (0.95), `training_cutoff`, `horizon` and `run_id`. These are not loaded.
+- The anomalies month column is `anomaly_date` (month start).
+
 ## Marketing Funnel (Olist funnel dataset; kpis.yaml v2.1.0 KPI_FUNNEL_*)
 
 **Sources:**
@@ -243,7 +310,7 @@ No targets are shown (they are to be set by the owner). The Olist reporting-mont
 - Revenue from deals: `declared_monthly_revenue_brl` is self-reported and is not revenue.
 - Seller-level funnel-to-GMV attribution: only 380 of 842 deal sellers appear in orders, and the data is not blended.
 
-**Adding a page.** Build a `Page`, call `header()`/`cards()`, then `PAGES.append(...)`. The page navigator on every page lists all non-hidden pages in `PAGES` order. The forecast/anomaly page is pending DE mart names.
+**Adding a page.** Build a `Page`, call `header()`/`cards()`, then `PAGES.append(...)`. The page navigator on every page lists all non-hidden pages in `PAGES` order. The Forecast & Anomalies page follows Marketing Funnel.
 
 ## Design system (light theme, `Enterprise360Light.json`)
 

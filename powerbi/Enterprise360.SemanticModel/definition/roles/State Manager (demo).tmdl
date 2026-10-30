@@ -24,4 +24,10 @@ role 'State Manager (demo)'
 
 	tablePermission 'UCI RFM' = FALSE ()
 
+	tablePermission 'GMV Forecast' = FALSE ()
+
+	tablePermission 'GMV Forecast Backtest' = FALSE ()
+
+	tablePermission 'GMV Anomalies' = FALSE ()
+
 	annotation PBI_Id = e3f17bcfa6c2501fa0e9242e5bf03c1a

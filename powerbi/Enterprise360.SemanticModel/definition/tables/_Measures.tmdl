@@ -872,6 +872,184 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
 
+	/// KPI_GMV_FORECAST (PARTIAL): Exploratory forward forecast of GMV (item price, not revenue), 2018-09..2019-02, from mart_gmv_forecast where is_forecast. Never shown on train rows (in-sample fit).
+	measure 'GMV Forecast' = CALCULATE ( SUM ( 'GMV Forecast'[forecast_gmv] ), KEEPFILTERS ( 'GMV Forecast'[is_forecast] = TRUE () ) )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 7a119d98-7e1e-54ec-a798-c3c99baef6c1
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting) [GMV Forecast Lower/Upper]: lower bound of the 95% model-based interval, not a guarantee (forecast rows).
+	measure 'GMV Forecast Lower' = CALCULATE ( SUM ( 'GMV Forecast'[lower_gmv] ), KEEPFILTERS ( 'GMV Forecast'[is_forecast] = TRUE () ) )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 43d88114-2f43-5740-9a44-81ee14a52c52
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting) [GMV Forecast Lower/Upper]: upper bound of the 95% model-based interval, not a guarantee (forecast rows).
+	measure 'GMV Forecast Upper' = CALCULATE ( SUM ( 'GMV Forecast'[upper_gmv] ), KEEPFILTERS ( 'GMV Forecast'[is_forecast] = TRUE () ) )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 28d08b2f-0579-5528-b859-116f3133298c
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): naive baseline (last observed value), baseline_gmv.
+	measure 'GMV Baseline (Naive)' = SUM ( 'GMV Forecast'[baseline_gmv] )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 4182988b-ec16-5462-8c05-2ef645a39c42
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): actual GMV per month from mart_gmv_forecast (reconciles to SUM(item_price), 0.00 difference per kpis.yaml).
+	measure 'GMV Forecast Actual' = SUM ( 'GMV Forecast'[actual_gmv] )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 5cd396a2-8a21-5be5-9b3d-36d2c8f94a87
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): out-of-sample backtest forecasts (validation and test rows only; never train).
+	measure 'GMV Backtest Forecast' = CALCULATE ( SUM ( 'GMV Forecast'[forecast_gmv] ), KEEPFILTERS ( 'GMV Forecast'[Split] IN { "validation", "test" } ) )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 8585d409-c2aa-56cd-b509-3baf42b651c6
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): backtest MAE (BRL) per model x split, 3 months per split. Read per cell; not additive.
+	measure 'Backtest MAE' = SUM ( 'GMV Forecast Backtest'[mae] )
+		formatString: R$ #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: a1e0761a-869e-5d46-84ad-364370ace34b
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive.
+	measure 'Backtest sMAPE %' = DIVIDE ( SUM ( 'GMV Forecast Backtest'[smape_pct] ), 100 )
+		formatString: 0.00%
+		displayFolder: Forecast & Anomalies
+		lineageTag: dd01d281-2bad-5462-8033-f67cffd46f40
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): n_months in the backtest split (3).
+	measure 'Backtest Months' = SUM ( 'GMV Forecast Backtest'[n_months] )
+		formatString: #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: bae780d7-c629-5dc0-8cd8-71b648e09084
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (breakdown): months with is_gmv_anomaly = TRUE (never is_anomaly). 0 in the current run. Statistical flags, not confirmed incidents.
+	measure 'GMV Anomaly Months' = CALCULATE ( COUNTROWS ( 'GMV Anomalies' ), KEEPFILTERS ( 'GMV Anomalies'[is_gmv_anomaly] = TRUE () ) ) + 0
+		formatString: #,0
+		displayFolder: Forecast & Anomalies
+		lineageTag: 9b44e3f8-b10d-505b-81b8-8fb8553a68d1
+
+		annotation KPI_Id = KPI_GMV_ANOMALY_FLAG
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
+
+	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (formatting): GMV robust z per month (shown against the 3.5 threshold). BLANK above month grain.
+	measure 'GMV Robust Z' = IF ( HASONEVALUE ( 'GMV Anomalies'[Month] ), SUM ( 'GMV Anomalies'[gmv_robust_z] ) )
+		formatString: 0.00
+		displayFolder: Forecast & Anomalies
+		lineageTag: 05781b48-cbf6-54d8-af1f-67bc1138f19a
+
+		annotation KPI_Id = KPI_GMV_ANOMALY_FLAG
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
+
+	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (formatting): stored z_threshold (3.5) for the threshold line.
+	measure 'GMV Anomaly Z Threshold' = MAX ( 'GMV Anomalies'[z_threshold] )
+		formatString: 0.0
+		displayFolder: Forecast & Anomalies
+		lineageTag: b52c9c72-c7a1-5962-9e80-4946bccab9fc
+
+		annotation KPI_Id = KPI_GMV_ANOMALY_FLAG
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
+
+	/// KPI_GMV_ANOMALY_FLAG (PARTIAL): Supporting measure (formatting): ORDERS robust z (orders flag), a separate series; not a GMV anomaly.
+	measure 'Orders Robust Z' = IF ( HASONEVALUE ( 'GMV Anomalies'[Month] ), SUM ( 'GMV Anomalies'[orders_robust_z] ) )
+		formatString: 0.00
+		displayFolder: Forecast & Anomalies
+		lineageTag: 2f482841-b654-5e69-a341-23b986b76eba
+
+		annotation KPI_Id = KPI_GMV_ANOMALY_FLAG
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_ANOMALY_FLAG
+
 	column Value
 		dataType: string
 		isHidden

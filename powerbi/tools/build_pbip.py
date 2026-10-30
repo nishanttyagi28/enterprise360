@@ -334,6 +334,55 @@ FUNNEL_TABLES: list[dict] = [
 TABLES.extend(FUNNEL_TABLES)
 
 # --------------------------------------------------------------------------------------
+# GMV Forecast & Anomalies (exploratory; kpis.yaml KPI_GMV_FORECAST / KPI_GMV_ANOMALY_FLAG @ ef85a62).
+# Standalone monthly tables with their own month axis (forecast months run past the reporting window; no Date
+# relationship, so Olist reporting-month filters never hide 2018-09..2019-02).
+# Column names are PROVISIONAL (DE marts uncommitted): rename = edit the source name here only.
+# --------------------------------------------------------------------------------------
+FC_SRC = {  # model column -> marts source column
+    "GMV Forecast": {"Forecast Month": "forecast_month", "Split": "split", "is_forecast": "is_forecast",
+                     "actual_gmv": "actual_gmv", "forecast_gmv": "forecast_gmv", "lower_gmv": "lower_gmv",
+                     "upper_gmv": "upper_gmv", "baseline_gmv": "baseline_gmv"},
+    "GMV Forecast Backtest": {"series": "series", "Model": "model", "Split": "split", "n_months": "n_months",
+                              "mae": "mae", "smape_pct": "smape_pct", "Is Selected Model": "is_selected_model"},
+    "GMV Anomalies": {"Month": "anomaly_date", "gmv_robust_z": "gmv_robust_z", "is_gmv_anomaly": "is_gmv_anomaly",
+                      "orders_robust_z": "orders_robust_z", "is_orders_anomaly": "is_orders_anomaly",
+                      "z_threshold": "z_threshold"},
+}
+FC_MARTS = {"GMV Forecast": "mart_gmv_forecast", "GMV Forecast Backtest": "mart_gmv_forecast_backtest",
+            "GMV Anomalies": "mart_gmv_anomalies"}
+_H = {"hidden": True, "summarize": "none"}
+_V = {"summarize": "none"}
+_MONEY = {"hidden": True, "summarize": "none", "fmt": "#,0"}
+FC_TYPES = {  # model column -> (dataType, opts)
+    "Forecast Month": ("dateTime", {"summarize": "none", "fmt": "yyyy-mm"}), "Split": ("string", _V),
+    "is_forecast": ("boolean", _H), "actual_gmv": ("decimal", _MONEY), "forecast_gmv": ("decimal", _MONEY),
+    "lower_gmv": ("decimal", _MONEY), "upper_gmv": ("decimal", _MONEY), "baseline_gmv": ("decimal", _MONEY),
+    "series": ("string", _H), "Model": ("string", _V), "n_months": ("int64", _H), "mae": ("decimal", _MONEY),
+    "smape_pct": ("decimal", _H), "Is Selected Model": ("boolean", _V),
+    "Month": ("dateTime", {"summarize": "none", "fmt": "yyyy-mm"}), "gmv_robust_z": ("double", _H),
+    "is_gmv_anomaly": ("boolean", _H), "orders_robust_z": ("double", _H), "is_orders_anomaly": ("boolean", _H),
+    "z_threshold": ("decimal", _H),
+}
+
+
+def _fc_src(t: str, col: str) -> str:
+    return FC_SRC[t][col]
+
+
+FC_TABLES = [
+    {"name": t, "dbt": FC_MARTS[t], "schema": "PgSchemaMarts",
+     "desc": {"GMV Forecast": "marts.mart_gmv_forecast: one row per forecast_month (train|validation|test|forecast). Exploratory; GMV = item price, not revenue. Standalone (own month axis).",
+              "GMV Forecast Backtest": "marts.mart_gmv_forecast_backtest, GMV series only: model vs naive baseline accuracy per split (3 months per split).",
+              "GMV Anomalies": "marts.mart_gmv_anomalies: monthly robust-z flags (20 complete reporting months). Use is_gmv_anomaly, never is_anomaly (GMV OR orders); is_anomaly is not loaded."}[t],
+     "cols": [(c, src, FC_TYPES[c][0], FC_TYPES[c][1]) for c, src in FC_SRC[t].items()],
+     "steps": ([f'Typed = Table.TransformColumnTypes(Selected, {{{{"{_fc_src(t, "Forecast Month")}", type date}}}})'] if t == "GMV Forecast" else
+               [f'GmvOnly = Table.SelectRows(Selected, each [{_fc_src(t, "series")}] = "gmv")'] if t == "GMV Forecast Backtest" else
+               [f'Typed = Table.TransformColumnTypes(Selected, {{{{"{_fc_src(t, "Month")}", type date}}}})'])}
+    for t in FC_SRC]
+TABLES.extend(FC_TABLES)
+
+# --------------------------------------------------------------------------------------
 # UCI Online Retail II (GBP) -- separate domain. NO relationship to any Olist table.
 # --------------------------------------------------------------------------------------
 UCI_PREFIX = "UCI "
@@ -447,7 +496,9 @@ ROLES = [
     # DEMO ONLY: static filter. Geography -> Customer -> Order -> Order Item / Payment / Delivery.
     ("State Manager (demo)", "DEMO ONLY: static row filter to customer state SP. Replace with a user-to-state mapping table + USERPRINCIPALNAME() for production.",
      [("Geography", '[State] = "SP"'), ("DQ Results", "FALSE ()")] + ([("DQ Run Summary", "FALSE ()")] if USE_DQ_RUN_SUMMARY else [])
-     + [(t["name"], "FALSE ()") for t in UCI_TABLES]),
+     + [(t["name"], "FALSE ()") for t in UCI_TABLES]
+     # company-wide forecast/anomaly marts have no state grain: hidden from the state demo role
+     + [(t["name"], "FALSE ()") for t in FC_TABLES]),
 ]
 
 # Relationships: (from table, from col [many], to table, to col [one], active)
@@ -816,6 +867,51 @@ SUPPORT_KIND.update({"MQLs by Origin": "breakdown", "Closed Deals by Business Se
                      "Cohort Maturity Colour": "formatting", "Negative Duration Deals": "dq_exclusion",
                      "Closed Deals by Days-to-Close Bucket": "breakdown"})
 
+# ---- Forecast & Anomalies measures (exploratory; PARTIAL)
+FCF = "Forecast & Anomalies"
+FCT, FCB, FCA = "'GMV Forecast'", "'GMV Forecast Backtest'", "'GMV Anomalies'"
+ONE_MONTH = "HASONEVALUE ( 'GMV Anomalies'[Month] )"
+FC_MEASURES = [
+    (FCF, "GMV Forecast", "KPI_GMV_FORECAST", "PARTIAL", BRL,
+     [f"CALCULATE ( SUM ( {FCT}[forecast_gmv] ), KEEPFILTERS ( {FCT}[is_forecast] = TRUE () ) )"],
+     "Exploratory forward forecast of GMV (item price, not revenue), 2018-09..2019-02, from mart_gmv_forecast where is_forecast. Never shown on train rows (in-sample fit)."),
+    (FCF, "GMV Forecast Lower", "KPI_GMV_FORECAST", "PARTIAL", BRL,
+     [f"CALCULATE ( SUM ( {FCT}[lower_gmv] ), KEEPFILTERS ( {FCT}[is_forecast] = TRUE () ) )"],
+     "Supporting measure (formatting) [GMV Forecast Lower/Upper]: lower bound of the 95% model-based interval, not a guarantee (forecast rows)."),
+    (FCF, "GMV Forecast Upper", "KPI_GMV_FORECAST", "PARTIAL", BRL,
+     [f"CALCULATE ( SUM ( {FCT}[upper_gmv] ), KEEPFILTERS ( {FCT}[is_forecast] = TRUE () ) )"],
+     "Supporting measure (formatting) [GMV Forecast Lower/Upper]: upper bound of the 95% model-based interval, not a guarantee (forecast rows)."),
+    (FCF, "GMV Baseline (Naive)", "KPI_GMV_FORECAST", "PARTIAL", BRL, [f"SUM ( {FCT}[baseline_gmv] )"],
+     "Supporting measure (breakdown): naive baseline (last observed value), baseline_gmv."),
+    (FCF, "GMV Forecast Actual", "KPI_GMV_FORECAST", "PARTIAL", BRL, [f"SUM ( {FCT}[actual_gmv] )"],
+     "Supporting measure (breakdown): actual GMV per month from mart_gmv_forecast (reconciles to SUM(item_price), 0.00 difference per kpis.yaml)."),
+    (FCF, "GMV Backtest Forecast", "KPI_GMV_FORECAST", "PARTIAL", BRL,
+     [f"CALCULATE ( SUM ( {FCT}[forecast_gmv] ), KEEPFILTERS ( {FCT}[Split] IN {{ \"validation\", \"test\" }} ) )"],
+     "Supporting measure (breakdown): out-of-sample backtest forecasts (validation and test rows only; never train)."),
+    (FCF, "Backtest MAE", "KPI_GMV_FORECAST", "PARTIAL", BRL, [f"SUM ( {FCB}[mae] )"],
+     "Supporting measure (breakdown): backtest MAE (BRL) per model x split, 3 months per split. Read per cell; not additive."),
+    (FCF, "Backtest sMAPE %", "KPI_GMV_FORECAST", "PARTIAL", "0.00%", [f"DIVIDE ( SUM ( {FCB}[smape_pct] ), 100 )"],
+     "Supporting measure (breakdown): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive."),
+    (FCF, "Backtest Months", "KPI_GMV_FORECAST", "PARTIAL", INT, [f"SUM ( {FCB}[n_months] )"],
+     "Supporting measure (breakdown): n_months in the backtest split (3)."),
+    (FCF, "GMV Anomaly Months", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", INT,
+     [f"CALCULATE ( COUNTROWS ( {FCA} ), KEEPFILTERS ( {FCA}[is_gmv_anomaly] = TRUE () ) ) + 0"],
+     "Supporting measure (breakdown): months with is_gmv_anomaly = TRUE (never is_anomaly). 0 in the current run. Statistical flags, not confirmed incidents."),
+    (FCF, "GMV Robust Z", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", "0.00",
+     [f"IF ( {ONE_MONTH}, SUM ( {FCA}[gmv_robust_z] ) )"],
+     "Supporting measure (formatting): GMV robust z per month (shown against the 3.5 threshold). BLANK above month grain."),
+    (FCF, "GMV Anomaly Z Threshold", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", "0.0", [f"MAX ( {FCA}[z_threshold] )"],
+     "Supporting measure (formatting): stored z_threshold (3.5) for the threshold line."),
+    (FCF, "Orders Robust Z", "KPI_GMV_ANOMALY_FLAG", "PARTIAL", "0.00",
+     [f"IF ( {ONE_MONTH}, SUM ( {FCA}[orders_robust_z] ) )"],
+     "Supporting measure (formatting): ORDERS robust z (orders flag), a separate series; not a GMV anomaly."),
+]
+MEASURES.extend(FC_MEASURES)
+SUPPORT_KIND.update({"GMV Forecast Lower": "formatting", "GMV Forecast Upper": "formatting", "GMV Baseline (Naive)": "breakdown",
+                     "GMV Forecast Actual": "breakdown", "GMV Backtest Forecast": "breakdown", "Backtest MAE": "breakdown",
+                     "Backtest sMAPE %": "breakdown", "Backtest Months": "breakdown", "GMV Anomaly Months": "breakdown",
+                     "GMV Robust Z": "formatting", "GMV Anomaly Z Threshold": "formatting", "Orders Robust Z": "formatting"})
+
 CALC_ITEMS = [
     ("Current", ["SELECTEDMEASURE ()"], None),
     ("MTD", ["CALCULATE ( SELECTEDMEASURE (), DATESMTD ( 'Date'[Date] ) )"], None),
@@ -954,7 +1050,7 @@ PARAMS = [("PgServer", "localhost:5432", "PostgreSQL server as host:port (laptop
           ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core)."),
           ("PgSchemaUci", "uci_core", "UCI Online Retail II core facts/dimensions (dbt +schema: uci_core)."),
           ("PgSchemaUciMarts", "uci_marts", "UCI Online Retail II marts (cohorts, RFM; dbt +schema: uci_marts)."),
-          ("PgSchemaMarts", "marts", "Olist marts (marketing funnel time-to-close; dbt +schema: marts).")]
+          ("PgSchemaMarts", "marts", "Olist marts (marketing funnel time-to-close, GMV forecast/anomalies; dbt +schema: marts).")]
 
 
 def build_model() -> None:
@@ -1391,7 +1487,45 @@ mf.add("time-to-close", "clusteredColumnChart", (992, 460, 264, 248),
        sort=("c", "Funnel Time to Close", "Days-to-Close Bucket", "Ascending"))
 mf.interactions.append((hid(mf.pid, "slicer-date"), hid(mf.pid, "time-to-close"), "NoFilter"))
 PAGES.append(mf)
-# Adding a page (e.g. the forecast/anomaly page next round): build a Page, call header()/cards(), PAGES.append(it).
+
+# ---- Forecast & Anomalies (exploratory; standalone monthly marts, own month axis)
+fa = Page("forecast-anomalies", "Forecast & Anomalies")
+header(fa, date_slicer=False)
+textbox(fa, "labels", (24, 52, 1232, 48),
+        "Exploratory | GMV = item price, not revenue | Statistical flags, not confirmed incidents | "
+        "Monthly grain; day-level events like Black Friday are not detectable | Targets to be set by owner", AMBER)
+fa.add("forecast", "lineChart", (24, 108, 820, 300),
+       {"Category": [("c", "GMV Forecast", "Forecast Month")],
+        "Y": [("m", M, "GMV Forecast Actual", "Actual GMV"),
+              ("m", M, "GMV Backtest Forecast", "Backtest forecast (validation + test)"),
+              ("m", M, "GMV Forecast", "Forward forecast"),
+              ("m", M, "GMV Forecast Lower", "95% model-based interval, not a guarantee (lower)"),
+              ("m", M, "GMV Forecast Upper", "95% model-based interval, not a guarantee (upper)"),
+              ("m", M, "GMV Baseline (Naive)", "Naive baseline (last value)")]},
+       "GMV actuals, backtest and forward forecast (BRL, monthly)",
+       subtitle="Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02. Interval = 95% model-based interval, not a guarantee",
+       sort=("c", "GMV Forecast", "Forecast Month", "Ascending"))
+fa.add("backtest", "pivotTable", (856, 108, 400, 196),
+       {"Rows": [("c", "GMV Forecast Backtest", "Split")], "Columns": [("c", "GMV Forecast Backtest", "Model")],
+        "Values": [("m", M, "Backtest MAE", "MAE (BRL)"), ("m", M, "Backtest sMAPE %", "sMAPE"), ("m", M, "Backtest Months", "n months")]},
+       "Backtest, 3 months per split", subtitle="Model (holt_damped) vs naive baseline (naive_last_value)", objects=NO_TOTALS)
+textbox(fa, "backtest-note", (856, 312, 400, 96),
+        "Model does not beat the naive baseline on the test period (test sMAPE 28.25% vs 13.37%). "
+        "All 3 test actuals (Jun-Aug 2018) fell below the 95% interval lower bound: intervals are not calibrated.", AMBER)
+fa.add("anomaly-z", "lineChart", (24, 420, 820, 288),
+       {"Category": [("c", "GMV Anomalies", "Month")],
+        "Y": [("m", M, "GMV Robust Z", "GMV robust z"), ("m", M, "GMV Anomaly Z Threshold", "Threshold (z = 3.5)"),
+              ("m", M, "Orders Robust Z", "Orders robust z (orders flag, not GMV)")]},
+       "GMV robust z vs 3.5 threshold (20 complete reporting months)",
+       subtitle="Statistical flags, not confirmed incidents. Nov 2017 GMV z = 2.84 (not flagged; Black Friday not detectable at monthly grain); orders z 5.60 is the orders flag only",
+       sort=("c", "GMV Anomalies", "Month", "Ascending"))
+fa.add("card-anomaly-months", "card", (856, 420, 400, 120), {"Values": [("m", M, "GMV Anomaly Months")]},
+       "GMV anomaly months (is_gmv_anomaly)", subtitle="Statistical flags, not confirmed incidents", objects=CARD_OBJ)
+textbox(fa, "anomaly-note", (856, 548, 400, 160),
+        "Flag = is_gmv_anomaly only (robust z > 3.5 on residuals of the selected model). "
+        "The combined is_anomaly field (GMV OR orders) is not used. Monthly grain; day-level events like Black Friday are not detectable.")
+PAGES.append(fa)
+# Adding a page: build a Page, call header()/cards(), PAGES.append(it).
 # The pageNavigator on every page lists all non-hidden pages in PAGES order automatically.
 
 # ---- Drill-through: Order Detail

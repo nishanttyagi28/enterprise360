@@ -110,6 +110,7 @@ def cross_refs(model_json: Path) -> int:
     errors += rls_safety(m)
     errors += domain_separation(m)
     errors += query_consistency(m)
+    errors += forecast_rules(m)
     n_vis = 0
     for vf in sorted((ROOT / "Enterprise360.Report").rglob("visual.json")):
         n_vis += 1
@@ -122,6 +123,26 @@ def cross_refs(model_json: Path) -> int:
             elif kind == "Column" and (ent, prop) in hidden:
                 print(f"WARN {vf.parent.name}: hidden column {ent}.{prop} used")
     print(f"cross-reference: {len(m['relationships'])} relationships, {len(meas)} measures, {n_vis} visuals checked, {errors} errors")
+    return errors
+
+
+def forecast_rules(m: dict) -> int:
+    """KPI_GMV_FORECAST / KPI_GMV_ANOMALY_FLAG guards: never plot in-sample (train) forecast_gmv; never use is_anomaly."""
+    errors = n = 0
+    for t in m["tables"]:
+        for ms in t.get("measures", []):
+            expr = ms["expression"] if isinstance(ms["expression"], str) else "\n".join(ms["expression"])
+            if "[forecast_gmv]" in expr:
+                n += 1
+                if "[is_forecast] = TRUE ()" not in expr and not re.search(r'\[Split\] IN \{\s*"validation",\s*"test"\s*\}', expr):
+                    print(f"FAIL measure {ms['name']}: forecast_gmv without is_forecast / validation+test filter (train rows = in-sample fit)"); errors += 1
+            if re.search(r"\[is_anomaly\]", expr):
+                print(f"FAIL measure {ms['name']}: uses is_anomaly (GMV OR orders); use is_gmv_anomaly"); errors += 1
+    for t in m["tables"]:
+        for c in t.get("columns", []):
+            if c.get("sourceColumn") == "is_anomaly":
+                print(f"FAIL {t['name']}[{c['name']}]: is_anomaly must not be loaded"); errors += 1
+    print(f"forecast-rules: {n} forecast_gmv measures checked, {errors} violations")
     return errors
 
 

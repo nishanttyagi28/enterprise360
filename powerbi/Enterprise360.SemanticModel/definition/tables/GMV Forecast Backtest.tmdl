@@ -1,0 +1,80 @@
+/// marts.mart_gmv_forecast_backtest, GMV series only: model vs naive baseline accuracy per split (3 months per split).
+table 'GMV Forecast Backtest'
+	lineageTag: fa47f6e8-8ab3-5652-bbd4-1c5ffd6fc8f5
+
+	column series
+		dataType: string
+		isHidden
+		lineageTag: 84bbc578-8ff6-5800-a689-340e00530641
+		summarizeBy: none
+		sourceColumn: series
+
+		annotation SummarizationSetBy = User
+
+	column Model
+		dataType: string
+		lineageTag: a6501a04-7c4e-58bd-9b76-9a41a895b10c
+		summarizeBy: none
+		sourceColumn: model
+
+		annotation SummarizationSetBy = User
+
+	column Split
+		dataType: string
+		lineageTag: a076d1c1-aba9-5271-9b0c-3af90e3f8216
+		summarizeBy: none
+		sourceColumn: split
+
+		annotation SummarizationSetBy = User
+
+	column n_months
+		dataType: int64
+		isHidden
+		lineageTag: 4ecf2fed-3c9d-5d6b-8614-b4f0f833ef7d
+		summarizeBy: none
+		sourceColumn: n_months
+
+		annotation SummarizationSetBy = User
+
+	column mae
+		dataType: decimal
+		isHidden
+		formatString: #,0
+		lineageTag: 4f9e8de7-9ef4-54dd-bea5-0220093b3660
+		summarizeBy: none
+		sourceColumn: mae
+
+		annotation SummarizationSetBy = User
+
+	column smape_pct
+		dataType: decimal
+		isHidden
+		lineageTag: 146476fd-f713-5ab1-a0aa-af5a7d4304b1
+		summarizeBy: none
+		sourceColumn: smape_pct
+
+		annotation SummarizationSetBy = User
+
+	column 'Is Selected Model'
+		dataType: boolean
+		lineageTag: 53fc7c6e-fcb4-5147-9a3b-5f8112c45bba
+		summarizeBy: none
+		sourceColumn: is_selected_model
+
+		annotation SummarizationSetBy = User
+
+	partition 'GMV Forecast Backtest' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast_backtest"]}[Data],
+					Selected = Table.SelectColumns(Data, {"series", "model", "split", "n_months", "mae", "smape_pct", "is_selected_model"}),
+					GmvOnly = Table.SelectRows(Selected, each [series] = "gmv"),
+					Money = Table.TransformColumnTypes(GmvOnly, {{"mae", Currency.Type}, {"smape_pct", Currency.Type}})
+				in
+					Money
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

@@ -1,0 +1,73 @@
+/// marts.mart_gmv_anomalies: monthly robust-z flags (20 complete reporting months). Use is_gmv_anomaly, never is_anomaly (GMV OR orders); is_anomaly is not loaded.
+table 'GMV Anomalies'
+	lineageTag: b7de0883-102a-5f9e-9670-b2b0565d5db9
+
+	column Month
+		dataType: dateTime
+		formatString: yyyy-mm
+		lineageTag: 0e1947ea-f30a-5228-9e33-7d0108316dc8
+		summarizeBy: none
+		sourceColumn: anomaly_date
+
+		annotation SummarizationSetBy = User
+
+	column gmv_robust_z
+		dataType: double
+		isHidden
+		lineageTag: 6a0fa451-cd8d-52b8-9d22-548bb6da6a6f
+		summarizeBy: none
+		sourceColumn: gmv_robust_z
+
+		annotation SummarizationSetBy = User
+
+	column is_gmv_anomaly
+		dataType: boolean
+		isHidden
+		lineageTag: c85dc7f4-f5f3-5041-8a3f-0d3558f4d48b
+		summarizeBy: none
+		sourceColumn: is_gmv_anomaly
+
+		annotation SummarizationSetBy = User
+
+	column orders_robust_z
+		dataType: double
+		isHidden
+		lineageTag: d76a3ebc-8d10-5b61-8988-c414152f5119
+		summarizeBy: none
+		sourceColumn: orders_robust_z
+
+		annotation SummarizationSetBy = User
+
+	column is_orders_anomaly
+		dataType: boolean
+		isHidden
+		lineageTag: 055157c1-32a5-55fa-a9e5-64fb1a1db7c8
+		summarizeBy: none
+		sourceColumn: is_orders_anomaly
+
+		annotation SummarizationSetBy = User
+
+	column z_threshold
+		dataType: decimal
+		isHidden
+		lineageTag: a720d4c5-6b66-55d2-b4d9-77ea487e46f8
+		summarizeBy: none
+		sourceColumn: z_threshold
+
+		annotation SummarizationSetBy = User
+
+	partition 'GMV Anomalies' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_anomalies"]}[Data],
+					Selected = Table.SelectColumns(Data, {"anomaly_date", "gmv_robust_z", "is_gmv_anomaly", "orders_robust_z", "is_orders_anomaly", "z_threshold"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"anomaly_date", type date}}),
+					Money = Table.TransformColumnTypes(Typed, {{"z_threshold", Currency.Type}})
+				in
+					Money
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
