@@ -791,10 +791,11 @@ FUNNEL_MEASURES = [
     (FF, "Cohort Is Mature", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", "0",
      ["VAR _maxWon = CALCULATE ( MAX ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )",
       "VAR _lastCohortDay = EOMONTH ( MAX ( 'Lead'[First Contact Date] ), 0 )",
-      "RETURN", f"    IF ( ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + {FUNNEL_MATURITY_DAYS} <= _maxWon, 1, 0 ) )"],
-     "Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Across several months it reflects the latest cohort in the selection."),
+      "RETURN",
+      f"    IF ( NOT HASONEVALUE ( 'Date'[Year Month] ) || ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + {FUNNEL_MATURITY_DAYS} <= _maxWon, 1, 0 ) )"],
+     "Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Per cohort month only: BLANK unless exactly one Date[Year Month] is in context, so it never shows at total level."),
     (FF, "Cohort Maturity Colour", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", None,
-     ["IF ( [Cohort Is Mature] = 0, \"#B45309\", \"#0E7490\" )"],
+     ["IF ( [Cohort Is Mature] == 0, \"#B45309\", \"#0E7490\" )"],
      "Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature."),
     (FF, "Median Days to Close", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", "0",
      ["MEDIANX (", "    FILTER ( 'Closed Deal', NOT ISBLANK ( 'Closed Deal'[days_to_close] ) && 'Closed Deal'[days_to_close] >= 0 ),",
@@ -1335,7 +1336,7 @@ PAGES.append(dq)
 
 # ---- Marketing Funnel (Olist funnel dataset; Date = first contact for leads, won date for deals)
 FUNNEL_TREND_NOTE = ("MQLs by first-contact month, deals by won month: different time axes, so deals / MQLs per month is NOT a conversion rate. "
-                     "June 2017 is partial (data starts 2017-06-14)")
+                     "June 2017 is partial (data starts 2017-06-14). Funnel not restricted to Olist reporting months; wins run to 2018-11-14.")
 PARTIAL_FUNNEL_CONV = ("Partial: wins are recorded only from Dec 2017, so 2017 cohorts look low because of how deals were recorded, not performance. "
                        "Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018)")
 FUNNEL_SCOPE = "Separate Olist marketing-funnel dataset (8,000 MQLs, 842 closed deals); not blended with order KPIs. Targets to be set by owner"
@@ -1362,7 +1363,7 @@ mf = Page("marketing-funnel", "Marketing Funnel")
 funnel_header(mf)
 cards(mf, [("MQLs", "MQLs"), ("Closed Deals", "Closed deals (by won date)"),
            ("Lead-to-Deal Conversion %", "Lead-to-deal conversion % (first-contact cohort)", "Partial: see cohort caveat"),
-           ("Median Days to Close", "Median days to close"),
+           ("Median Days to Close", "Median days to close (by won date)"),
            ("Unmatched Closed Deals", "Unmatched closed deals (DQ)"),
            ("Negative Duration Deals", "Negative-duration deals (excluded from median)")])
 mf.add("trend", "lineChart", (24, CONTENT_Y, 616, 236),

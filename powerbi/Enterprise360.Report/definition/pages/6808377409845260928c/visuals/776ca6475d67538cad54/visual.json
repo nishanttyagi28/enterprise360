@@ -168,7 +168,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Median days to close'"
+                  "Value": "'Median days to close (by won date)'"
                 }
               }
             },

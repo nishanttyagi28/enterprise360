@@ -210,7 +210,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'MQLs by first-contact month, deals by won month: different time axes, so deals / MQLs per month is NOT a conversion rate. June 2017 is partial (data starts 2017-06-14)'"
+                  "Value": "'MQLs by first-contact month, deals by won month: different time axes, so deals / MQLs per month is NOT a conversion rate. June 2017 is partial (data starts 2017-06-14). Funnel not restricted to Olist reporting months; wins run to 2018-11-14.'"
                 }
               }
             },

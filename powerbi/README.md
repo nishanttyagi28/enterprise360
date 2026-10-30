@@ -178,7 +178,7 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - `core.dim_lead_origin` → table **Lead Origin**
 - `marts.mart_funnel_time_to_close` → table **Funnel Time to Close**, read through the new parameter **`PgSchemaMarts`** (default `marts`)
 
-`marts.mart_funnel_monthly` is not loaded. It does not yet expose the `converted_leads_in_cohort`, `mqls` and `is_cohort_mature` columns that kpis.yaml requires (**pending DE**), so cohort figures are computed from the lead rows.
+`marts.mart_funnel_monthly` now exposes `mqls`, `converted_leads_in_cohort` and `is_cohort_mature`, but it is deliberately **not** loaded. Cohort figures are computed from the lead rows (`core.fct_leads`) by choice, so that they recalculate correctly under any origin or date filter and stay ratio-of-sums at every grain. The mart is pre-aggregated by month × origin.
 
 **Relationships.** Five were added, all one-way many-to-one and all active, with no ambiguous paths because the two facts are not related to each other:
 - Lead[first_contact_date_key] → Date
@@ -200,7 +200,7 @@ There is no Seller link, so funnel figures are never blended with order KPIs. Th
 | Unmatched Closed Deals (dq_exclusion) | KPI_FUNNEL_CLOSED_DEALS | SUPPORTED | 0 |
 | Converted Leads in Cohort (breakdown) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | 842 |
 | Lead-to-Deal Conversion % | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | 10.53% (842 / 8,000) |
-| Cohort Is Mature (formatting; 1/0) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | Apr and May 2018 immature (cohort month end + 210 days > 2018-11-14) |
+| Cohort Is Mature (formatting; 1/0, per cohort month only; BLANK at total) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | Apr and May 2018 immature (cohort month end + 210 days > 2018-11-14) |
 | Cohort Maturity Colour (hidden formatting helper) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | #B45309 immature, #0E7490 mature |
 | Median Days to Close | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 14 (841 valid deals) |
 | Negative Duration Deals (dq_exclusion) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 1 |

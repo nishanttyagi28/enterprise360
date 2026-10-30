@@ -798,12 +798,12 @@ table _Measures
 
 		annotation KPI_Status = PARTIAL
 
-	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Across several months it reflects the latest cohort in the selection.
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Per cohort month only: BLANK unless exactly one Date[Year Month] is in context, so it never shows at total level.
 	measure 'Cohort Is Mature' =
 			VAR _maxWon = CALCULATE ( MAX ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )
 			VAR _lastCohortDay = EOMONTH ( MAX ( 'Lead'[First Contact Date] ), 0 )
 			RETURN
-				IF ( ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + 210 <= _maxWon, 1, 0 ) )
+				IF ( NOT HASONEVALUE ( 'Date'[Year Month] ) || ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + 210 <= _maxWon, 1, 0 ) )
 		formatString: 0
 		displayFolder: Marketing Funnel
 		lineageTag: 16ab0e21-346d-528e-bdc3-9a7212ff2504
@@ -817,7 +817,7 @@ table _Measures
 		annotation KPI_ParentKpi = KPI_FUNNEL_CONVERSION_RATE
 
 	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature.
-	measure 'Cohort Maturity Colour' = IF ( [Cohort Is Mature] = 0, "#B45309", "#0E7490" )
+	measure 'Cohort Maturity Colour' = IF ( [Cohort Is Mature] == 0, "#B45309", "#0E7490" )
 		isHidden
 		displayFolder: Marketing Funnel
 		lineageTag: b3e8a923-a5cc-5435-8655-3f6b9b46100e
