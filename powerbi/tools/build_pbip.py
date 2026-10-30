@@ -285,6 +285,52 @@ next(t for t in TABLES if t["name"] == "Date")["cols"].append(
     (DATE_REPORTING_FLAG_COLUMN, DATE_REPORTING_FLAG_COLUMN, "boolean", {"hidden": True, "summarize": "none"}))
 
 # --------------------------------------------------------------------------------------
+# Olist Marketing Funnel (separate Olist dataset: 8,000 MQLs, 842 closed deals). Olist domain; never blended
+# with order KPIs (no Seller relationship). Dates: leads by first_contact_date_key, deals by won_date_key.
+# --------------------------------------------------------------------------------------
+FUNNEL_TABLES: list[dict] = [
+    {"name": "Lead", "dbt": "fct_leads",
+     "desc": "core.fct_leads: one row per marketing qualified lead (mql_id unique, 8,000). Dated by first_contact_date (cohort axis). Null origin is mapped by DE to 'not_recorded'.",
+     "cols": [
+         ("MQL ID", "mql_id", "string", {"summarize": "none"}),
+         ("origin_sk", "origin_sk", "string", KEY),
+         ("first_contact_date_key", "first_contact_date_key", "int64", KEY),
+         ("First Contact Date", "first_contact_date", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd"}),
+         ("is_closed", "is_closed", "boolean", {"hidden": True, "summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"first_contact_date", type date}})']},
+    {"name": "Closed Deal", "dbt": "fct_closed_deals",
+     "desc": "core.fct_closed_deals: one row per closed deal (mql_id unique, 842), dated by won_date (2017-12-05..2018-11-14). declared_monthly_revenue_brl deliberately not loaded (self-reported, not revenue).",
+     "cols": [
+         ("MQL ID", "mql_id", "string", {"summarize": "none"}),
+         ("origin_sk", "origin_sk", "string", KEY),
+         ("won_date_key", "won_date_key", "int64", KEY),
+         ("Won Date", "won_date", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd"}),
+         ("days_to_close", "days_to_close", "int64", {"hidden": True, "summarize": "none"}),
+         ("Business Segment", "business_segment", "string", {"summarize": "none"}),
+         ("Lead Type", "lead_type", "string", {"summarize": "none"}),
+     ],
+     "steps": ['Typed = Table.TransformColumnTypes(Selected, {{"won_date", type date}})']},
+    {"name": "Lead Origin", "dbt": "dim_lead_origin",
+     "desc": "core.dim_lead_origin: lead acquisition origin. 'not_recorded' = null origin (unknown member, 60 MQLs); 'unknown' is a real source value (1,099 MQLs). Kept separate.",
+     "cols": [
+         ("origin_sk", "origin_sk", "string", KEY),
+         ("Origin", "origin", "string", {"summarize": "none"}),
+         ("Origin Group", "origin_group", "string", {"summarize": "none"}),
+         ("is_unknown_member", "is_unknown_member", "boolean", {"hidden": True, "summarize": "none"}),
+     ]},
+    {"name": "Funnel Time to Close", "dbt": "mart_funnel_time_to_close", "schema": "PgSchemaMarts",
+     "desc": "marts.mart_funnel_time_to_close: closed deals per days-to-close bucket x origin (all dates; not filtered by Date).",
+     "cols": [
+         ("origin_sk", "origin_sk", "string", KEY),
+         ("Bucket Order", "bucket_order", "int64", {"hidden": True, "summarize": "none"}),
+         ("Days-to-Close Bucket", "bucket", "string", {"summarize": "none", "sortby": "Bucket Order"}),
+         ("deals", "deals", "int64", {"hidden": True, "summarize": "none"}),
+     ]},
+]
+TABLES.extend(FUNNEL_TABLES)
+
+# --------------------------------------------------------------------------------------
 # UCI Online Retail II (GBP) -- separate domain. NO relationship to any Olist table.
 # --------------------------------------------------------------------------------------
 UCI_PREFIX = "UCI "
@@ -706,6 +752,66 @@ UCI_MEASURES = [
      "Invoice-country share of gross product sales (UK about 85.5%; non-UK view shown separately)."),
 ]
 
+# ---- Marketing Funnel measures (kpis.yaml v2.1.0: KPI_FUNNEL_*)
+FF = "Marketing Funnel"
+FUNNEL_RELS = [
+    ("Lead", "first_contact_date_key", "Date", "date_key", True),
+    ("Lead", "origin_sk", "Lead Origin", "origin_sk", True),
+    ("Closed Deal", "won_date_key", "Date", "date_key", True),
+    ("Closed Deal", "origin_sk", "Lead Origin", "origin_sk", True),
+    ("Funnel Time to Close", "origin_sk", "Lead Origin", "origin_sk", True),
+]
+RELS.extend(FUNNEL_RELS)
+FUNNEL_MATURITY_DAYS = 210
+FUNNEL_MEASURES = [
+    (FF, "MQLs", "KPI_FUNNEL_MQLS", "SUPPORTED", INT, ["DISTINCTCOUNT ( 'Lead'[MQL ID] )"],
+     "Distinct marketing qualified leads dated by first_contact_date (8,000 overall). June 2017 is a partial month (data starts 2017-06-14)."),
+    (FF, "MQLs by Origin", "KPI_FUNNEL_MQLS", "SUPPORTED", INT, ["[MQLs]"],
+     "Supporting measure (breakdown): MQLs by Lead Origin. 'not_recorded' (null origin, 60) and 'unknown' (1,099) are separate items."),
+    (FF, "Closed Deals", "KPI_FUNNEL_CLOSED_DEALS", "SUPPORTED", INT, ["DISTINCTCOUNT ( 'Closed Deal'[MQL ID] )"],
+     "Distinct closed deals dated by won_date (842 overall). Different time axis from MQLs: deals-in-month / MQLs-in-month is NOT a conversion rate."),
+    (FF, "Closed Deals by Business Segment", "KPI_FUNNEL_CLOSED_DEALS", "SUPPORTED", INT, ["[Closed Deals]"],
+     "Supporting measure (breakdown): closed deals by business_segment (33 segments; 1 null)."),
+    (FF, "Closed Deals by Lead Type", "KPI_FUNNEL_CLOSED_DEALS", "SUPPORTED", INT, ["[Closed Deals]"],
+     "Supporting measure (breakdown): closed deals by lead_type (6 null)."),
+    (FF, "Unmatched Closed Deals", "KPI_FUNNEL_CLOSED_DEALS", "SUPPORTED", INT,
+     ["COUNTROWS (", "    EXCEPT (", "        VALUES ( 'Closed Deal'[MQL ID] ),",
+      "        CALCULATETABLE ( VALUES ( 'Lead'[MQL ID] ), REMOVEFILTERS ( 'Lead' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )",
+      "    )", ") + 0"],
+     "Supporting measure (dq_exclusion): closed deals whose mql_id is not in fct_leads (0 at 2026-10-31)."),
+    (FF, "Converted Leads in Cohort", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", INT,
+     ["CALCULATE ( DISTINCTCOUNT ( 'Lead'[MQL ID] ), KEEPFILTERS ( 'Lead'[is_closed] = TRUE () ) )"],
+     "Supporting measure (breakdown): MQLs in the first-contact cohort that became a closed deal at any later date (attributed to first-contact month, not won month)."),
+    (FF, "Lead-to-Deal Conversion %", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", "0.00%",
+     ["DIVIDE ( [Converted Leads in Cohort], [MQLs] )"],
+     "Cohort conversion: converted leads in cohort / MQLs in cohort, by first-contact month (ratio of sums; 10.53% overall). Never deals-in-month / MQLs-in-month, never an average of monthly rates. PARTIAL: wins recorded only from 2017-12-05 (2017 cohorts under-observed); Apr-May 2018 cohorts immature (210-day window)."),
+    (FF, "Cohort Is Mature", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", "0",
+     ["VAR _maxWon = CALCULATE ( MAX ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )",
+      "VAR _lastCohortDay = EOMONTH ( MAX ( 'Lead'[First Contact Date] ), 0 )",
+      "RETURN", f"    IF ( ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + {FUNNEL_MATURITY_DAYS} <= _maxWon, 1, 0 ) )"],
+     "Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Across several months it reflects the latest cohort in the selection."),
+    (FF, "Cohort Maturity Colour", "KPI_FUNNEL_CONVERSION_RATE", "PARTIAL", None,
+     ["IF ( [Cohort Is Mature] = 0, \"#B45309\", \"#0E7490\" )"],
+     "Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature."),
+    (FF, "Median Days to Close", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", "0",
+     ["MEDIANX (", "    FILTER ( 'Closed Deal', NOT ISBLANK ( 'Closed Deal'[days_to_close] ) && 'Closed Deal'[days_to_close] >= 0 ),",
+      "    'Closed Deal'[days_to_close]", ")"],
+     "Median days from first contact to won date over matched deal rows with non-negative duration (14 over 841 deals). Recomputed from rows at every level; never an average of the mart's median_days_to_close."),
+    (FF, "Negative Duration Deals", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", INT,
+     ["CALCULATE ( COUNTROWS ( 'Closed Deal' ), KEEPFILTERS ( 'Closed Deal'[days_to_close] < 0 ) ) + 0"],
+     "Supporting measure (dq_exclusion): deals with won_date before first_contact_date (1), excluded from Median Days to Close."),
+    (FF, "Closed Deals by Days-to-Close Bucket", "KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE", "SUPPORTED", INT,
+     ["SUM ( 'Funnel Time to Close'[deals] )"],
+     "Supporting measure (breakdown, pending KPI & Quality listing): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close (all dates; includes the 'negative (anomaly)' bucket)."),
+]
+MEASURES.extend(FUNNEL_MEASURES)
+HIDDEN_MEASURES.add("Cohort Maturity Colour")
+SUPPORT_KIND.update({"MQLs by Origin": "breakdown", "Closed Deals by Business Segment": "breakdown",
+                     "Closed Deals by Lead Type": "breakdown", "Unmatched Closed Deals": "dq_exclusion",
+                     "Converted Leads in Cohort": "breakdown", "Cohort Is Mature": "formatting",
+                     "Cohort Maturity Colour": "formatting", "Negative Duration Deals": "dq_exclusion",
+                     "Closed Deals by Days-to-Close Bucket": "breakdown"})
+
 CALC_ITEMS = [
     ("Current", ["SELECTEDMEASURE ()"], None),
     ("MTD", ["CALCULATE ( SELECTEDMEASURE (), DATESMTD ( 'Date'[Date] ) )"], None),
@@ -837,6 +943,14 @@ def build_calc_group() -> str:
     return "\n".join(out)
 
 
+PARAMS = [("PgServer", "localhost:5432", "PostgreSQL server as host:port (laptop: localhost:5432)."),
+          ("PgDatabase", "enterprise360", "PostgreSQL database."),
+          ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core)."),
+          ("PgSchemaUci", "uci_core", "UCI Online Retail II core facts/dimensions (dbt +schema: uci_core)."),
+          ("PgSchemaUciMarts", "uci_marts", "UCI Online Retail II marts (cohorts, RFM; dbt +schema: uci_marts)."),
+          ("PgSchemaMarts", "marts", "Olist marts (marketing funnel time-to-close; dbt +schema: marts).")]
+
+
 def build_model() -> None:
     if SM.exists():
         shutil.rmtree(SM)
@@ -846,7 +960,7 @@ def build_model() -> None:
     write(d / "database.tmdl", "database\n\tcompatibilityLevel: 1567\n\n")
     all_tables = [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE, "Time Intelligence"]
     # Desktop lists EVERY Power Query query (parameters + every M-partition table) in PBI_QueryOrder.
-    QUERY_ORDER = ["PgServer", "PgDatabase", "PgSchema", "PgSchemaUci", "PgSchemaUciMarts"] + [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE]
+    QUERY_ORDER = [p_[0] for p_ in PARAMS] + [t["name"] for t in TABLES] + ["_Measures", UCI_MEASURES_TABLE]
     model = ["model Model", "\tculture: en-US", "\tdefaultPowerBIDataSourceVersion: powerBI_V3",
              "\tdiscourageImplicitMeasures", "\tsourceQueryCulture: en-US", "\tdataAccessOptions",
              "\t\tlegacyRedirects", "\t\treturnErrorValuesAsNull", "",
@@ -861,11 +975,7 @@ def build_model() -> None:
         rl += [f"\tannotation PBI_Id = {gid('role', rname).replace('-', '')}", ""]
         write(d / "roles" / f"{rname}.tmdl", "\n".join(rl))
     write(d / "model.tmdl", "\n".join(model))
-    params = [("PgServer", "localhost:5432", "PostgreSQL server as host:port (laptop: localhost:5432)."),
-              ("PgDatabase", "enterprise360", "PostgreSQL database."),
-              ("PgSchema", "core", "Schema holding the dbt core facts/dimensions (dbt +schema: core)."),
-              ("PgSchemaUci", "uci_core", "UCI Online Retail II core facts/dimensions (dbt +schema: uci_core)."),
-              ("PgSchemaUciMarts", "uci_marts", "UCI Online Retail II marts (cohorts, RFM; dbt +schema: uci_marts).")]
+    params = PARAMS
     ex = []
     for n, v, desc in params:
         ex += [f"/// {desc}",
@@ -1216,6 +1326,65 @@ dq.add("warehouse-checks", "multiRowCard", (1052, 524, 204, 184),
                    ("m", M, "Items Sold"), ("m", M, "Payment Records")]},
        "Warehouse checks from fct tables (purchase-date slicers do not apply here)")
 PAGES.append(dq)
+
+# ---- Marketing Funnel (Olist funnel dataset; Date = first contact for leads, won date for deals)
+FUNNEL_TREND_NOTE = ("MQLs by first-contact month, deals by won month: different time axes, so deals / MQLs per month is NOT a conversion rate. "
+                     "June 2017 is partial (data starts 2017-06-14)")
+PARTIAL_FUNNEL_CONV = ("Partial: wins are recorded only from Dec 2017, so 2017 cohorts look low because of how deals were recorded, not performance. "
+                       "Amber = immature cohort (month end + 210 days after the latest won date: Apr and May 2018)")
+FUNNEL_SCOPE = "Separate Olist marketing-funnel dataset (8,000 MQLs, 842 closed deals); not blended with order KPIs. Targets to be set by owner"
+
+
+def textbox(pg: Page, vname: str, pos: tuple, text: str, colour: str = None) -> None:
+    style = {"fontSize": "10pt", "color": colour or C_TEXT2}
+    pg.add(vname, "textbox", pos, None, None,
+           objects={"general": [{"properties": {"paragraphs": [{"textRuns": [{"value": text, "textStyle": style}]}]}}]})
+
+
+def funnel_header(pg: Page) -> None:
+    pg.add("nav", "pageNavigator", (24, 8, 1232, 36), card=False)
+    pg.add("slicer-date", "slicer", (24, 52, 360, 48), {"Values": [("c", "Date", "Date")]},
+           "Date (first contact for MQLs, won date for deals)", objects=SLICER_OBJ)
+    pg.add("slicer-origin", "slicer", (396, 52, 260, 48), {"Values": [("c", "Lead Origin", "Origin")]}, "Lead origin",
+           objects={"data": [{"properties": {"mode": lit("Dropdown")}}]})
+    textbox(pg, "scope", (668, 52, 588, 48), FUNNEL_SCOPE)
+
+
+MATURITY_FILL = {"dataPoint": [{"properties": {"fill": {"solid": {"color": {"expr": fld("m", M, "Cohort Maturity Colour")}}}},
+                                "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}]}}]}
+mf = Page("marketing-funnel", "Marketing Funnel")
+funnel_header(mf)
+cards(mf, [("MQLs", "MQLs"), ("Closed Deals", "Closed deals (by won date)"),
+           ("Lead-to-Deal Conversion %", "Lead-to-deal conversion % (first-contact cohort)", "Partial: see cohort caveat"),
+           ("Median Days to Close", "Median days to close"),
+           ("Unmatched Closed Deals", "Unmatched closed deals (DQ)"),
+           ("Negative Duration Deals", "Negative-duration deals (excluded from median)")])
+mf.add("trend", "lineChart", (24, CONTENT_Y, 616, 236),
+       {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "MQLs"), ("m", M, "Closed Deals")]},
+       "MQLs and closed deals by month", subtitle=FUNNEL_TREND_NOTE, sort=("c", "Date", "Year Month", "Ascending"))
+mf.add("cohort", "clusteredColumnChart", (652, CONTENT_Y, 604, 236),
+       {"Category": [("c", "Date", "Year Month")], "Y": [("m", M, "Lead-to-Deal Conversion %")],
+        "Tooltips": [("m", M, "MQLs"), ("m", M, "Converted Leads in Cohort"), ("m", M, "Cohort Is Mature", "Cohort mature (1 = yes)")]},
+       "Lead-to-deal conversion % by first-contact cohort", subtitle=PARTIAL_FUNNEL_CONV,
+       sort=("c", "Date", "Year Month", "Ascending"), objects=MATURITY_FILL)
+mf.add("origin", "tableEx", (24, 460, 400, 248),
+       {"Values": [("c", "Lead Origin", "Origin"), ("m", M, "MQLs by Origin"), ("m", M, "Converted Leads in Cohort"),
+                   ("m", M, "Lead-to-Deal Conversion %")]},
+       "MQLs and conversion by origin", subtitle="'not_recorded' = null origin (60); 'unknown' is a source value (1,099); kept separate",
+       sort=("m", M, "MQLs by Origin", "Descending"))
+mf.add("segment", "clusteredBarChart", (436, 460, 280, 248),
+       {"Category": [("c", "Closed Deal", "Business Segment")], "Y": [("m", M, "Closed Deals by Business Segment")]},
+       "Closed deals by business segment", sort=("m", M, "Closed Deals by Business Segment", "Descending"))
+mf.add("lead-type", "clusteredBarChart", (728, 460, 252, 248),
+       {"Category": [("c", "Closed Deal", "Lead Type")], "Y": [("m", M, "Closed Deals by Lead Type")]},
+       "Closed deals by lead type", sort=("m", M, "Closed Deals by Lead Type", "Descending"))
+mf.add("time-to-close", "clusteredColumnChart", (992, 460, 264, 248),
+       {"Category": [("c", "Funnel Time to Close", "Days-to-Close Bucket")], "Y": [("m", M, "Closed Deals by Days-to-Close Bucket")]},
+       "Time to close (days)", subtitle="All dates (mart not date-filtered); includes 1 negative-duration anomaly",
+       sort=("c", "Funnel Time to Close", "Days-to-Close Bucket", "Ascending"))
+PAGES.append(mf)
+# Adding a page (e.g. the forecast/anomaly page next round): build a Page, call header()/cards(), PAGES.append(it).
+# The pageNavigator on every page lists all non-hidden pages in PAGES order automatically.
 
 # ---- Drill-through: Order Detail
 od = Page("order-detail", "Order Detail", ptype="Drillthrough", hidden=True, drill=("Order", "Order ID"))

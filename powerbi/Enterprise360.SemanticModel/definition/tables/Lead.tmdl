@@ -1,0 +1,62 @@
+/// core.fct_leads: one row per marketing qualified lead (mql_id unique, 8,000). Dated by first_contact_date (cohort axis). Null origin is mapped by DE to 'not_recorded'.
+table Lead
+	lineageTag: 33be8a4e-3f98-5a06-9ae3-24849ca01af3
+
+	column 'MQL ID'
+		dataType: string
+		lineageTag: d8d5ee19-9b20-5a1e-8421-18c9074f1d2c
+		summarizeBy: none
+		sourceColumn: mql_id
+
+		annotation SummarizationSetBy = User
+
+	column origin_sk
+		dataType: string
+		isHidden
+		lineageTag: d4eac1cb-daba-5c6d-a7ea-cc72fcc3f7df
+		summarizeBy: none
+		sourceColumn: origin_sk
+
+		annotation SummarizationSetBy = User
+
+	column first_contact_date_key
+		dataType: int64
+		isHidden
+		lineageTag: 1ef8ca79-0ea9-5593-b618-7cf2aeefce7d
+		summarizeBy: none
+		sourceColumn: first_contact_date_key
+
+		annotation SummarizationSetBy = User
+
+	column 'First Contact Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 1fa1aba0-312d-5f26-94bf-f229722bbaae
+		summarizeBy: none
+		sourceColumn: first_contact_date
+
+		annotation SummarizationSetBy = User
+
+	column is_closed
+		dataType: boolean
+		isHidden
+		lineageTag: a734b918-c905-5963-be3b-8bb9249e2030
+		summarizeBy: none
+		sourceColumn: is_closed
+
+		annotation SummarizationSetBy = User
+
+	partition Lead = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_leads"]}[Data],
+					Selected = Table.SelectColumns(Data, {"mql_id", "origin_sk", "first_contact_date_key", "first_contact_date", "is_closed"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"first_contact_date", type date}})
+				in
+					Typed
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

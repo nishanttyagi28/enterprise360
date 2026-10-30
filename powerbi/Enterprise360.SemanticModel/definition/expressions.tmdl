@@ -27,3 +27,9 @@ expression PgSchemaUciMarts = "uci_marts" meta [IsParameterQuery = true, Type = 
 	lineageTag: 98f1342d-da39-5a50-9340-23eeb24ea8f8
 
 	annotation PBI_ResultType = Text
+
+/// Olist marts (marketing funnel time-to-close; dbt +schema: marts).
+expression PgSchemaMarts = "marts" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: fc97b833-4c9d-5b1f-bc27-46f13e1396da
+
+	annotation PBI_ResultType = Text

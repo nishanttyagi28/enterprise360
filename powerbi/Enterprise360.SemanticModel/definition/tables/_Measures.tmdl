@@ -690,6 +690,168 @@ table _Measures
 
 		annotation KPI_Status = SUPPORTED
 
+	/// KPI_FUNNEL_MQLS (SUPPORTED): Distinct marketing qualified leads dated by first_contact_date (8,000 overall). June 2017 is a partial month (data starts 2017-06-14).
+	measure MQLs = DISTINCTCOUNT ( 'Lead'[MQL ID] )
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: e752e26d-0717-5460-9e0e-e7c9b6e1cc90
+
+		annotation KPI_Id = KPI_FUNNEL_MQLS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_FUNNEL_MQLS (SUPPORTED): Supporting measure (breakdown): MQLs by Lead Origin. 'not_recorded' (null origin, 60) and 'unknown' (1,099) are separate items.
+	measure 'MQLs by Origin' = [MQLs]
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: f5092ff7-11f9-5786-9063-83d1170d3507
+
+		annotation KPI_Id = KPI_FUNNEL_MQLS
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = breakdown
+
+	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Distinct closed deals dated by won_date (842 overall). Different time axis from MQLs: deals-in-month / MQLs-in-month is NOT a conversion rate.
+	measure 'Closed Deals' = DISTINCTCOUNT ( 'Closed Deal'[MQL ID] )
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: 8343d22a-f367-56a8-88cd-689127bf7f72
+
+		annotation KPI_Id = KPI_FUNNEL_CLOSED_DEALS
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Supporting measure (breakdown): closed deals by business_segment (33 segments; 1 null).
+	measure 'Closed Deals by Business Segment' = [Closed Deals]
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: a72571cb-e81e-509b-abb7-1f2c374eb487
+
+		annotation KPI_Id = KPI_FUNNEL_CLOSED_DEALS
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = breakdown
+
+	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Supporting measure (breakdown): closed deals by lead_type (6 null).
+	measure 'Closed Deals by Lead Type' = [Closed Deals]
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: b463d925-6dc7-5715-bfd7-7a66dca86a16
+
+		annotation KPI_Id = KPI_FUNNEL_CLOSED_DEALS
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = breakdown
+
+	/// KPI_FUNNEL_CLOSED_DEALS (SUPPORTED): Supporting measure (dq_exclusion): closed deals whose mql_id is not in fct_leads (0 at 2026-10-31).
+	measure 'Unmatched Closed Deals' =
+			COUNTROWS (
+				EXCEPT (
+					VALUES ( 'Closed Deal'[MQL ID] ),
+					CALCULATETABLE ( VALUES ( 'Lead'[MQL ID] ), REMOVEFILTERS ( 'Lead' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )
+				)
+			) + 0
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: 9307630e-7179-5761-a69e-afccaaadabb6
+
+		annotation KPI_Id = KPI_FUNNEL_CLOSED_DEALS
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = dq_exclusion
+
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (breakdown): MQLs in the first-contact cohort that became a closed deal at any later date (attributed to first-contact month, not won month).
+	measure 'Converted Leads in Cohort' = CALCULATE ( DISTINCTCOUNT ( 'Lead'[MQL ID] ), KEEPFILTERS ( 'Lead'[is_closed] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: 4f726e1d-4a99-55dc-9b50-54209c9940d5
+
+		annotation KPI_Id = KPI_FUNNEL_CONVERSION_RATE
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = breakdown
+
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Cohort conversion: converted leads in cohort / MQLs in cohort, by first-contact month (ratio of sums; 10.53% overall). Never deals-in-month / MQLs-in-month, never an average of monthly rates. PARTIAL: wins recorded only from 2017-12-05 (2017 cohorts under-observed); Apr-May 2018 cohorts immature (210-day window).
+	measure 'Lead-to-Deal Conversion %' = DIVIDE ( [Converted Leads in Cohort], [MQLs] )
+		formatString: 0.00%
+		displayFolder: Marketing Funnel
+		lineageTag: 1e9f9c6e-978c-5dc4-b1d8-10efbc84b0fc
+
+		annotation KPI_Id = KPI_FUNNEL_CONVERSION_RATE
+
+		annotation KPI_Status = PARTIAL
+
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Supporting measure (formatting): 1 = cohort mature (cohort month end + 210 days <= latest won_date), 0 = immature (Apr and May 2018). Across several months it reflects the latest cohort in the selection.
+	measure 'Cohort Is Mature' =
+			VAR _maxWon = CALCULATE ( MAX ( 'Closed Deal'[Won Date] ), REMOVEFILTERS ( 'Closed Deal' ), REMOVEFILTERS ( 'Date' ), REMOVEFILTERS ( 'Lead Origin' ) )
+			VAR _lastCohortDay = EOMONTH ( MAX ( 'Lead'[First Contact Date] ), 0 )
+			RETURN
+				IF ( ISBLANK ( _lastCohortDay ), BLANK (), IF ( _lastCohortDay + 210 <= _maxWon, 1, 0 ) )
+		formatString: 0
+		displayFolder: Marketing Funnel
+		lineageTag: 16ab0e21-346d-528e-bdc3-9a7212ff2504
+
+		annotation KPI_Id = KPI_FUNNEL_CONVERSION_RATE
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+	/// KPI_FUNNEL_CONVERSION_RATE (PARTIAL): Hidden formatting helper for [Cohort Is Mature]: caveat amber #B45309 for immature cohorts, accent #0E7490 for mature.
+	measure 'Cohort Maturity Colour' = IF ( [Cohort Is Mature] = 0, "#B45309", "#0E7490" )
+		isHidden
+		displayFolder: Marketing Funnel
+		lineageTag: b3e8a923-a5cc-5435-8655-3f6b9b46100e
+
+		annotation KPI_Id = KPI_FUNNEL_CONVERSION_RATE
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Median days from first contact to won date over matched deal rows with non-negative duration (14 over 841 deals). Recomputed from rows at every level; never an average of the mart's median_days_to_close.
+	measure 'Median Days to Close' =
+			MEDIANX (
+				FILTER ( 'Closed Deal', NOT ISBLANK ( 'Closed Deal'[days_to_close] ) && 'Closed Deal'[days_to_close] >= 0 ),
+				'Closed Deal'[days_to_close]
+			)
+		formatString: 0
+		displayFolder: Marketing Funnel
+		lineageTag: 69d56018-1d9e-515a-8127-26bfc1b51cd5
+
+		annotation KPI_Id = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+
+		annotation KPI_Status = SUPPORTED
+
+	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Supporting measure (dq_exclusion): deals with won_date before first_contact_date (1), excluded from Median Days to Close.
+	measure 'Negative Duration Deals' = CALCULATE ( COUNTROWS ( 'Closed Deal' ), KEEPFILTERS ( 'Closed Deal'[days_to_close] < 0 ) ) + 0
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: 9741859c-37f1-51f4-827c-2f4f1264e050
+
+		annotation KPI_Id = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = dq_exclusion
+
+	/// KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE (SUPPORTED): Supporting measure (breakdown, pending KPI & Quality listing): closed deals per days-to-close bucket from marts.mart_funnel_time_to_close (all dates; includes the 'negative (anomaly)' bucket).
+	measure 'Closed Deals by Days-to-Close Bucket' = SUM ( 'Funnel Time to Close'[deals] )
+		formatString: #,0
+		displayFolder: Marketing Funnel
+		lineageTag: 5a61a617-1b77-5cc2-82c0-b3a49bb81782
+
+		annotation KPI_Id = KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE
+
+		annotation KPI_Status = SUPPORTED
+
+		annotation KPI_SupportingKind = breakdown
+
 	column Value
 		dataType: string
 		isHidden

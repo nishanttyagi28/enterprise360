@@ -7,7 +7,7 @@ model Model
 		legacyRedirects
 		returnErrorValuesAsNull
 
-annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema","PgSchemaUci","PgSchemaUciMarts","Order Item","Order","Payment","Delivery","Customer","Geography","Seller","Product","Order Status","Date","DQ Results","DQ Run Summary","UCI Invoice Line","UCI Invoice","UCI Date","UCI Customer","UCI Product","UCI Country","UCI Cohort","UCI RFM","_Measures","_Measures UCI"]
+annotation PBI_QueryOrder = ["PgServer","PgDatabase","PgSchema","PgSchemaUci","PgSchemaUciMarts","PgSchemaMarts","Order Item","Order","Payment","Delivery","Customer","Geography","Seller","Product","Order Status","Date","DQ Results","DQ Run Summary","Lead","Closed Deal","Lead Origin","Funnel Time to Close","UCI Invoice Line","UCI Invoice","UCI Date","UCI Customer","UCI Product","UCI Country","UCI Cohort","UCI RFM","_Measures","_Measures UCI"]
 
 annotation __PBI_TimeIntelligenceEnabled = 0
 
@@ -25,6 +25,10 @@ ref table 'Order Status'
 ref table Date
 ref table 'DQ Results'
 ref table 'DQ Run Summary'
+ref table Lead
+ref table 'Closed Deal'
+ref table 'Lead Origin'
+ref table 'Funnel Time to Close'
 ref table 'UCI Invoice Line'
 ref table 'UCI Invoice'
 ref table 'UCI Date'

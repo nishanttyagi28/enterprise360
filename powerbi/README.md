@@ -170,6 +170,81 @@ Lead conversion (Olist Marketing Funnel) is a separate dataset and is not joined
 - **Seller handover (KPI_SELLER_HANDOVER_OTD, PARTIAL).** `[Seller Handover On-Time %]` = items handed to the carrier (`fct_deliveries.delivered_carrier_at`) at or before the item's `shipping_limit_at` / items with both timestamps. It is a **full timestamp** comparison, now computed in dbt as `core.fct_order_items.is_handover_on_time`. The model loads that source column, and the earlier calculated column was dropped. `shipping_limit_at` is **Olist's seller shipping deadline, not a contractual SLA**. Partial: carrier handover is recorded per order, so sellers in multi-seller orders share one handover time. This caveat appears on every visual that shows the measure: the Operations & Delivery card and the seller-state chart. `[Handover Missing Timestamp]` (DQ exclusion count) is shown on the Data Quality page. Target and benchmark: to be set by owner.
 - dbt surrogate keys are md5 text; `date_key` is an integer yyyymmdd.
 
+## Marketing Funnel (Olist funnel dataset; kpis.yaml v2.1.0 KPI_FUNNEL_*)
+
+**Sources:**
+- `core.fct_leads` → table **Lead**
+- `core.fct_closed_deals` → table **Closed Deal**. `declared_monthly_revenue_brl` is deliberately *not* loaded: it is self-reported and is not revenue.
+- `core.dim_lead_origin` → table **Lead Origin**
+- `marts.mart_funnel_time_to_close` → table **Funnel Time to Close**, read through the new parameter **`PgSchemaMarts`** (default `marts`)
+
+`marts.mart_funnel_monthly` is not loaded. It does not yet expose the `converted_leads_in_cohort`, `mqls` and `is_cohort_mature` columns that kpis.yaml requires (**pending DE**), so cohort figures are computed from the lead rows.
+
+**Relationships.** Five were added, all one-way many-to-one and all active, with no ambiguous paths because the two facts are not related to each other:
+- Lead[first_contact_date_key] → Date
+- Closed Deal[won_date_key] → Date
+- Lead[origin_sk] → Lead Origin
+- Closed Deal[origin_sk] → Lead Origin
+- Funnel Time to Close[origin_sk] → Lead Origin
+
+There is no Seller link, so funnel figures are never blended with order KPIs. The "State Manager (demo)" role does not filter funnel tables, because they have no state.
+
+**Measures** (display folder `Marketing Funnel`) and values verified in the warehouse on 2026-10-31:
+
+| Measure | KPI id | Status | Verified |
+|---|---|---|---|
+| MQLs | KPI_FUNNEL_MQLS | SUPPORTED | 8,000 |
+| MQLs by Origin (breakdown) | KPI_FUNNEL_MQLS | SUPPORTED | not_recorded (null origin) 60, unknown 1,099, kept separate |
+| Closed Deals | KPI_FUNNEL_CLOSED_DEALS | SUPPORTED | 842 |
+| Closed Deals by Business Segment, Closed Deals by Lead Type (breakdowns) | KPI_FUNNEL_CLOSED_DEALS | SUPPORTED | 33 segments, 1 null segment, 6 null lead type |
+| Unmatched Closed Deals (dq_exclusion) | KPI_FUNNEL_CLOSED_DEALS | SUPPORTED | 0 |
+| Converted Leads in Cohort (breakdown) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | 842 |
+| Lead-to-Deal Conversion % | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | 10.53% (842 / 8,000) |
+| Cohort Is Mature (formatting; 1/0) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | Apr and May 2018 immature (cohort month end + 210 days > 2018-11-14) |
+| Cohort Maturity Colour (hidden formatting helper) | KPI_FUNNEL_CONVERSION_RATE | PARTIAL | #B45309 immature, #0E7490 mature |
+| Median Days to Close | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 14 (841 valid deals) |
+| Negative Duration Deals (dq_exclusion) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | 1 |
+| Closed Deals by Days-to-Close Bucket (breakdown) | KPI_FUNNEL_MEDIAN_DAYS_TO_CLOSE | SUPPORTED | from the mart. **Not yet listed in kpis.yaml — needs KPI & Quality approval.** |
+
+**How the measures work:**
+- **Conversion** is cohorted by first-contact month: `DIVIDE([Converted Leads in Cohort], [MQLs])`. It is never deals-in-month divided by MQLs-in-month, and never an average of monthly rates.
+- **Median** is `MEDIANX` over deal rows with a non-negative duration. It never averages the mart's `median_days_to_close`.
+- **Naming:** kpis.yaml `power_bi_dax` proposes `[Lead Conversion %]`. The measure uses the KPI & Quality name `[Lead-to-Deal Conversion %]`.
+
+**Monthly cohort values** (first-contact month):
+
+| Cohort | Conversion |
+|---|---|
+| 2017-06 | 0% |
+| 2017-07 | 0.84% |
+| 2017-08 | 2.33% |
+| 2017-09 | 2.24% |
+| 2017-10 | 3.37% |
+| 2017-11 | 4.04% |
+| 2017-12 | 5.50% |
+| 2018-01 | 13.32% |
+| 2018-02 | 14.49% |
+| 2018-03 | 14.22% |
+| 2018-04 | 13.54% (immature) |
+| 2018-05 | 9.98% (immature) |
+
+**Page "Marketing Funnel"** (after Data Quality in the navigator):
+- Date and origin slicers, and a scope note.
+- KPI cards.
+- MQLs and closed deals trend. Its subtitle explains the two time axes and the partial June 2017.
+- Cohort conversion column chart. Bars are coloured by maturity (amber #B45309 = immature), with the caveat that wins only start in Dec 2017, so 2017 cohorts look low.
+- Origin table, plus closed deals by business segment and by lead type.
+- Time-to-close distribution, from the mart (all dates).
+
+No targets are shown (they are to be set by the owner). The Olist reporting-month trend filter is **not** applied here: the funnel spans 2017-06 to 2018-11, and deals in Sep–Nov 2018 would be dropped.
+
+**NOT SUPPORTED (funnel):**
+- CAC, ROAS and cost per lead: there is no marketing spend data.
+- Revenue from deals: `declared_monthly_revenue_brl` is self-reported and is not revenue.
+- Seller-level funnel-to-GMV attribution: only 380 of 842 deal sellers appear in orders, and the data is not blended.
+
+**Adding a page.** Build a `Page`, call `header()`/`cards()`, then `PAGES.append(...)`. The page navigator on every page lists all non-hidden pages in `PAGES` order. The forecast/anomaly page is pending DE mart names.
+
 ## Design system (light theme, `Enterprise360Light.json`)
 
 Every page, including the drill-through and tooltip pages, has a white page and wallpaper (#FFFFFF, transparency 0). Visuals are white cards with a 1px #E5E7EB border, radius 4, and no shadow. Gridlines are #E5E7EB, and table and matrix headers are #F3F4F6.

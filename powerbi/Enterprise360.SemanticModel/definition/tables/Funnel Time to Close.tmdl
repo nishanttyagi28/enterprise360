@@ -1,0 +1,53 @@
+/// marts.mart_funnel_time_to_close: closed deals per days-to-close bucket x origin (all dates; not filtered by Date).
+table 'Funnel Time to Close'
+	lineageTag: 63c56291-b1df-5904-82ec-7576479b38ab
+
+	column origin_sk
+		dataType: string
+		isHidden
+		lineageTag: 471568d2-1bfc-5734-86fc-6b9b489f25da
+		summarizeBy: none
+		sourceColumn: origin_sk
+
+		annotation SummarizationSetBy = User
+
+	column 'Bucket Order'
+		dataType: int64
+		isHidden
+		lineageTag: ba66670d-ce58-5924-9399-8e5e55ef1d07
+		summarizeBy: none
+		sourceColumn: bucket_order
+
+		annotation SummarizationSetBy = User
+
+	column 'Days-to-Close Bucket'
+		dataType: string
+		lineageTag: 5e51d0d4-fa18-5296-9399-e49cc3d644c0
+		summarizeBy: none
+		sourceColumn: bucket
+		sortByColumn: 'Bucket Order'
+
+		annotation SummarizationSetBy = User
+
+	column deals
+		dataType: int64
+		isHidden
+		lineageTag: 5d72079b-55ff-54c6-9333-7e2b3bba3b14
+		summarizeBy: none
+		sourceColumn: deals
+
+		annotation SummarizationSetBy = User
+
+	partition 'Funnel Time to Close' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchemaMarts, Item = "mart_funnel_time_to_close"]}[Data],
+					Selected = Table.SelectColumns(Data, {"origin_sk", "bucket_order", "bucket", "deals"})
+				in
+					Selected
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

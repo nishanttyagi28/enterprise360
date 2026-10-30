@@ -1,0 +1,78 @@
+/// core.fct_closed_deals: one row per closed deal (mql_id unique, 842), dated by won_date (2017-12-05..2018-11-14). declared_monthly_revenue_brl deliberately not loaded (self-reported, not revenue).
+table 'Closed Deal'
+	lineageTag: 130cbb40-95ab-5b9e-ac98-372621f461da
+
+	column 'MQL ID'
+		dataType: string
+		lineageTag: a2ff4fdd-1e38-58e9-838a-d9c906ae1059
+		summarizeBy: none
+		sourceColumn: mql_id
+
+		annotation SummarizationSetBy = User
+
+	column origin_sk
+		dataType: string
+		isHidden
+		lineageTag: 8841a727-27bb-55ea-883f-d53a06e10b46
+		summarizeBy: none
+		sourceColumn: origin_sk
+
+		annotation SummarizationSetBy = User
+
+	column won_date_key
+		dataType: int64
+		isHidden
+		lineageTag: 0c81a7fe-55ac-5b1a-8f9a-4823660fee30
+		summarizeBy: none
+		sourceColumn: won_date_key
+
+		annotation SummarizationSetBy = User
+
+	column 'Won Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: db233c29-1a9b-53d2-b268-9759d473bdc9
+		summarizeBy: none
+		sourceColumn: won_date
+
+		annotation SummarizationSetBy = User
+
+	column days_to_close
+		dataType: int64
+		isHidden
+		lineageTag: c5f939d4-9173-5319-9f04-2d7bb9c8f6e6
+		summarizeBy: none
+		sourceColumn: days_to_close
+
+		annotation SummarizationSetBy = User
+
+	column 'Business Segment'
+		dataType: string
+		lineageTag: b4b7b940-d19e-520e-9a3a-386e9c402069
+		summarizeBy: none
+		sourceColumn: business_segment
+
+		annotation SummarizationSetBy = User
+
+	column 'Lead Type'
+		dataType: string
+		lineageTag: ccc27d94-c308-51fc-827f-91647f403733
+		summarizeBy: none
+		sourceColumn: lead_type
+
+		annotation SummarizationSetBy = User
+
+	partition 'Closed Deal' = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgServer, PgDatabase),
+					Data = Source{[Schema = PgSchema, Item = "fct_closed_deals"]}[Data],
+					Selected = Table.SelectColumns(Data, {"mql_id", "origin_sk", "won_date_key", "won_date", "days_to_close", "business_segment", "lead_type"}),
+					Typed = Table.TransformColumnTypes(Selected, {{"won_date", type date}})
+				in
+					Typed
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table

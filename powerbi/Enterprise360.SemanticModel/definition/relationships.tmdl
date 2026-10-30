@@ -65,3 +65,23 @@ relationship e974361b-0356-59ee-aa9f-210733e3db9c
 relationship 735fc098-65be-5f0d-a764-1696a687e305
 	fromColumn: 'UCI Invoice'.invoice_date_key
 	toColumn: 'UCI Date'.date_key
+
+relationship 8a2971bd-b779-53b2-adce-88a763d263ed
+	fromColumn: Lead.first_contact_date_key
+	toColumn: Date.date_key
+
+relationship 6a7f04ea-c088-594a-a9f4-7d33cd3625d6
+	fromColumn: Lead.origin_sk
+	toColumn: 'Lead Origin'.origin_sk
+
+relationship c126eefd-6672-5c59-8581-7275293b7704
+	fromColumn: 'Closed Deal'.won_date_key
+	toColumn: Date.date_key
+
+relationship 3522eeee-a655-5947-87ad-b5e8249a317b
+	fromColumn: 'Closed Deal'.origin_sk
+	toColumn: 'Lead Origin'.origin_sk
+
+relationship a423917a-0922-5113-8c81-050e65ecf9ed
+	fromColumn: 'Funnel Time to Close'.origin_sk
+	toColumn: 'Lead Origin'.origin_sk
