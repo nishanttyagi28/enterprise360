@@ -1893,7 +1893,7 @@ kpis:
   status: PARTIAL
   area: marketing_funnel
   definition: 'Share of MQLs in a first_contact_date month cohort that became a closed deal (at any later date). Cohort-based: numerator and denominator share the same MQL cohort; never deals-in-month / MQLs-in-month.'
-  formula: "COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)"
+  formula: "mart_funnel_monthly.converted_leads_in_cohort / mart_funnel_monthly.mqls = COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)"
   numerator: 'closed deals whose mql_id is in the cohort'
   denominator: 'MQLs in the cohort'
   unit: percent
@@ -1917,27 +1917,33 @@ kpis:
   validation_rules:
   - '0 <= conversion <= 1'
   - 'numerator <= denominator per cohort'
-  - 'cohort_is_mature flag present: cohort mature when cohort month end + 162 days <= max(won_date) in data (162 = observed p90 days-to-close)'
+  - 'is_cohort_mature: cohort mature when cohort month end + 210 days <= max(won_date) in data (210 = observed p95 days-to-close; locked by owner 2026-10-31); Apr and May 2018 cohorts are immature'
+  - 'mart_funnel_monthly must expose converted_leads_in_cohort, mqls and is_cohort_mature'
   - 'overall all-cohort value 842/8,000 = 10.53% (2026-10-31)'
   supporting_measures:
   - measure: '[Converted Leads in Cohort]'
     kind: breakdown
     purpose: "numerator, attributed to the lead's first_contact month, not won month"
-  - measure: '[Cohort Is Mature]'
+  - measure: '[Cohort Is Mature] (is_cohort_mature, 210-day window)'
     kind: formatting
     purpose: 'maturity flag; grey out or exclude immature cohorts'
   caveats:
   - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
   - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
-  - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 162 days (observed p90 of first_contact->won days; p75 55, p95 210, max 427). With max won_date 2018-11-14 all cohorts pass p90, but Apr–May 2018 do not pass p95 — report mature cohorts only or show the flag.'
+  - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 210 days (observed p95 of first_contact->won days; p75 55, p90 162, max 427), locked by owner. With max won_date 2018-11-14, Apr and May 2018 cohorts are immature — report mature cohorts only or show the flag.'
   - 'Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.'
   - 'Ratio of sums per cohort; never average monthly rates across cohorts or origins.'
-  version: 1.0.0
+  version: 1.0.1
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
     author: KPI & Quality
     change: initial definition; dbt models pending DE (names PROPOSED by DE, not yet in repo)
+    pr: TBD
+  - version: 1.0.1
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: maturity window locked at 210 days (p95, was 162/p90); Apr–May 2018 immature; mart must expose converted_leads_in_cohort, mqls, is_cohort_mature
     pr: TBD
   implementations:
     dbt: 'mart_funnel_monthly.conversion_rate (PROPOSED)'
