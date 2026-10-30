@@ -52,7 +52,7 @@ table 'UCI RFM'
 		annotation SummarizationSetBy = User
 
 	column monetary_net_sales_proxy_gbp
-		dataType: double
+		dataType: decimal
 		isHidden
 		formatString: #,0.00
 		lineageTag: c1784c1c-80d1-53df-a8aa-7b4fdc4ec8d5
@@ -67,9 +67,10 @@ table 'UCI RFM'
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchemaUciMarts, Item = "uci_mart_customer_rfm"]}[Data],
-					Selected = Table.SelectColumns(Data, {"customer_id", "r_score", "f_score", "m_score", "recency_days", "frequency", "monetary_net_sales_proxy_gbp"})
+					Selected = Table.SelectColumns(Data, {"customer_id", "r_score", "f_score", "m_score", "recency_days", "frequency", "monetary_net_sales_proxy_gbp"}),
+					Money = Table.TransformColumnTypes(Selected, {{"monetary_net_sales_proxy_gbp", Currency.Type}})
 				in
-					Selected
+					Money
 
 	annotation PBI_NavigationStepName = Navigation
 

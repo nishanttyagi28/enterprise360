@@ -198,7 +198,7 @@ The old cyan #22D3EE (1.81:1 on white) is no longer used. The data palette keeps
 Desktop rebuilds its Power Query document from the TMDL and compares it with the model. Three differences found in the generated model could trigger the banner:
 
 1. `PBI_QueryOrder` listed only the 5 parameters, not the 22 table queries. Desktop always lists every query (parameters, then every table with an M partition).
-2. Six PostgreSQL `numeric` columns were declared `dataType: decimal`, but the PostgreSQL connector returns `type number`. Desktop maps `type number` to `double`, so the M output schema did not match the model columns. The affected columns were:
+2. Six PostgreSQL `numeric` money columns were declared `dataType: decimal` (Fixed Decimal) while their M returned untyped `type number`, so the M output schema differed from the model columns. They stay **decimal (Fixed Decimal, 4 dp)**, and each table's M now has an explicit `Money = Table.TransformColumnTypes(..., {{col, Currency.Type}})` step, the pattern Desktop writes. Decimal is kept, not double, so exact comparisons such as `ABS(payment_vs_items_diff) > 0.01` are free of float error. The warehouse maximum scale fits within 4 dp: 2 dp for item_price, freight_value, payment_value and payment_vs_items_diff, and 3 dp for line_value and monetary_net_sales_proxy_gbp. Values at 4 dp reproduce the verified results exactly: 1,076 mismatch orders, GMV R$13,591,643.70 and UCI Net Sales (proxy) £18,914,519.437. The six columns are:
    - Order Item: item_price, freight_value
    - Order: payment_vs_items_diff
    - Payment: payment_value
@@ -206,9 +206,9 @@ Desktop rebuilds its Power Query document from the TMDL and compares it with the
    - UCI RFM: monetary_net_sales_proxy_gbp
 3. Navigation tables were missing `annotation PBI_NavigationStepName = Navigation`.
 
-These are now `double`, the full query order and the annotations are written, and `validate_pbip.py` runs a `query-consistency` check. The check fails on:
+These now carry the Currency.Type step, the full query order and the annotations are written, and `validate_pbip.py` runs a `query-consistency` check. The check fails on:
 - a missing or unknown query in PBI_QueryOrder;
-- a `decimal` column on an M table without Currency.Type;
+- a `decimal` column whose M does not type it `Currency.Type`, or a `Currency.Type` column not declared `decimal`;
 - a missing PBI_ResultType or PBI_NavigationStepName annotation;
 - any `.pbi/unappliedChanges.json` or `cache.abf` in the project.
 

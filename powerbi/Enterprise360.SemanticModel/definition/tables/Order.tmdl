@@ -74,7 +74,7 @@ table Order
 		annotation SummarizationSetBy = User
 
 	column payment_vs_items_diff
-		dataType: double
+		dataType: decimal
 		isHidden
 		formatString: #,0.00
 		lineageTag: 322d19da-fbc4-5812-afbd-e45ec771603f
@@ -107,9 +107,10 @@ table Order
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchema, Item = "fct_orders"]}[Data],
-					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff", "has_items", "has_payment"})
+					Selected = Table.SelectColumns(Data, {"order_id", "customer_sk", "order_status", "purchase_date_key", "purchased_at", "approved_at", "hours_to_approve", "latest_review_score", "payment_vs_items_diff", "has_items", "has_payment"}),
+					Money = Table.TransformColumnTypes(Selected, {{"payment_vs_items_diff", Currency.Type}})
 				in
-					Selected
+					Money
 
 	annotation PBI_NavigationStepName = Navigation
 

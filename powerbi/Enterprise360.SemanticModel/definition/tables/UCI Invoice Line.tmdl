@@ -39,7 +39,7 @@ table 'UCI Invoice Line'
 		annotation SummarizationSetBy = User
 
 	column line_value
-		dataType: double
+		dataType: decimal
 		isHidden
 		formatString: #,0.00
 		lineageTag: 11fe86b1-0caa-5002-a12f-f5a341db0abd
@@ -98,9 +98,10 @@ table 'UCI Invoice Line'
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchemaUci, Item = "uci_fct_invoice_lines"]}[Data],
-					Selected = Table.SelectColumns(Data, {"uci_product_sk", "uci_customer_sk", "uci_country_sk", "invoice_date_key", "line_value", "quantity", "is_cancellation", "is_product_line", "has_customer", "line_type"})
+					Selected = Table.SelectColumns(Data, {"uci_product_sk", "uci_customer_sk", "uci_country_sk", "invoice_date_key", "line_value", "quantity", "is_cancellation", "is_product_line", "has_customer", "line_type"}),
+					Money = Table.TransformColumnTypes(Selected, {{"line_value", Currency.Type}})
 				in
-					Selected
+					Money
 
 	annotation PBI_NavigationStepName = Navigation
 

@@ -148,8 +148,14 @@ def query_consistency(m: dict) -> int:
         if "Item =" in src and tann.get("PBI_NavigationStepName") != "Navigation":
             print(f"FAIL table {t['name']}: missing annotation PBI_NavigationStepName = Navigation"); errors += 1
         for c in t.get("columns", []):
-            if c.get("type") != "calculated" and c.get("dataType") == "decimal" and "Currency.Type" not in src:
-                print(f"FAIL {t['name']}[{c['name']}]: dataType decimal but M returns type number (Desktop maps to double)"); errors += 1
+            if c.get("type") == "calculated" or "sourceColumn" not in c:
+                continue
+            sc = re.escape(c["sourceColumn"])
+            is_cur = re.search(r'\{\s*"' + sc + r'"\s*,\s*Currency\.Type\s*\}', src) is not None
+            if c.get("dataType") == "decimal" and not is_cur:
+                print(f"FAIL {t['name']}[{c['name']}]: dataType decimal but M does not type it Currency.Type"); errors += 1
+            if is_cur and c.get("dataType") != "decimal":
+                print(f"FAIL {t['name']}[{c['name']}]: M types it Currency.Type but dataType is {c.get('dataType')}"); errors += 1
     for e in m.get("expressions", []):
         if (e.get("kind") or "m") == "m" and "IsParameterQuery" in str(e.get("expression")):
             if not any(a["name"] == "PBI_ResultType" for a in e.get("annotations", [])) or not e.get("lineageTag"):

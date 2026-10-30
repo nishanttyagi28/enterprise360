@@ -37,7 +37,7 @@ table Payment
 		annotation SummarizationSetBy = User
 
 	column payment_value
-		dataType: double
+		dataType: decimal
 		isHidden
 		formatString: #,0.00
 		lineageTag: ddf30030-713d-5eb5-9ba3-5c9a24922e74
@@ -52,9 +52,10 @@ table Payment
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchema, Item = "fct_payments"]}[Data],
-					Selected = Table.SelectColumns(Data, {"order_id", "payment_sequential", "payment_type", "payment_installments", "payment_value"})
+					Selected = Table.SelectColumns(Data, {"order_id", "payment_sequential", "payment_type", "payment_installments", "payment_value"}),
+					Money = Table.TransformColumnTypes(Selected, {{"payment_value", Currency.Type}})
 				in
-					Selected
+					Money
 
 	annotation PBI_NavigationStepName = Navigation
 

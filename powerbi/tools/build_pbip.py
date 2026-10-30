@@ -103,8 +103,8 @@ TABLES: list[dict] = [
             ("order_item_id", "order_item_id", "int64", KEY),
             ("product_sk", "product_sk", "string", KEY),
             ("seller_sk", "seller_sk", "string", KEY),
-            ("item_price", "item_price", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
-            ("freight_value", "freight_value", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("item_price", "item_price", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("freight_value", "freight_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
             ("Shipping Limit At", "shipping_limit_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
             ("is_handover_on_time", "is_handover_on_time", "boolean", {"hidden": True, "summarize": "none"}),
         ],
@@ -121,7 +121,7 @@ TABLES: list[dict] = [
             ("Approved At", "approved_at", "dateTime", {"summarize": "none", "fmt": "yyyy-mm-dd hh:nn"}),
             ("hours_to_approve", "hours_to_approve", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.0"}),
             ("Review Score", "latest_review_score", "int64", {"summarize": "none"}),
-            ("payment_vs_items_diff", "payment_vs_items_diff", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+            ("payment_vs_items_diff", "payment_vs_items_diff", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
             ("has_items", "has_items", "boolean", {"hidden": True, "summarize": "none"}),
             ("has_payment", "has_payment", "boolean", {"hidden": True, "summarize": "none"}),
         ],
@@ -134,7 +134,7 @@ TABLES: list[dict] = [
             ("payment_sequential", "payment_sequential", "int64", KEY),
             ("Payment Type", "payment_type", "string", {"summarize": "none"}),
             ("Payment Installments", "payment_installments", "int64", {"summarize": "none"}),
-            ("payment_value", "payment_value", "double", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
+            ("payment_value", "payment_value", "decimal", {"hidden": True, "summarize": "sum", "fmt": "#,0.00"}),
         ],
     },
     {
@@ -299,7 +299,7 @@ UCI_TABLES: list[dict] = [
          ("uci_customer_sk", "uci_customer_sk", "string", KEY),
          ("uci_country_sk", "uci_country_sk", "string", KEY),
          ("invoice_date_key", "invoice_date_key", "int64", KEY),
-         ("line_value", "line_value", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+         ("line_value", "line_value", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
          ("quantity", "quantity", "int64", {"hidden": True, "summarize": "none"}),
          ("is_cancellation", "is_cancellation", "boolean", {"hidden": True, "summarize": "none"}),
          ("is_product_line", "is_product_line", "boolean", {"hidden": True, "summarize": "none"}),
@@ -379,7 +379,7 @@ UCI_TABLES: list[dict] = [
          ("M Score", "m_score", "int64", {"summarize": "none"}),
          ("Recency Days", "recency_days", "int64", {"summarize": "none"}),
          ("Frequency", "frequency", "int64", {"summarize": "none"}),
-         ("monetary_net_sales_proxy_gbp", "monetary_net_sales_proxy_gbp", "double", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
+         ("monetary_net_sales_proxy_gbp", "monetary_net_sales_proxy_gbp", "decimal", {"hidden": True, "summarize": "none", "fmt": "#,0.00"}),
      ]},
 ]
 TABLES.extend(UCI_TABLES)
@@ -763,7 +763,12 @@ def build_table(t: dict) -> str:
         out.append("\t\tannotation SummarizationSetBy = Automatic")
         out.append("")
     select = t.get("select") or [src for _, src, _, _ in t["cols"]]
-    m = pg_source(t["dbt"], select, t.get("steps"), optional=t.get("optional", False), schema=t.get("schema", "PgSchema"))
+    steps = list(t.get("steps") or [])
+    money = [src for _, src, dtype, _ in t["cols"] if dtype == "decimal"]
+    if money:  # fixed decimal (4 dp) columns: type them Currency.Type in M so the query output matches dataType decimal
+        prev = steps[-1].split("=")[0].strip() if steps else "Selected"
+        steps.append(f"Money = Table.TransformColumnTypes({prev}, {{" + ", ".join(f'{{"{c}", Currency.Type}}' for c in money) + "})")
+    m = pg_source(t["dbt"], select, steps, optional=t.get("optional", False), schema=t.get("schema", "PgSchema"))
     out.append(f"\tpartition {q(name)} = m")
     out.append("\t\tmode: import")
     out.append("\t\tsource =")
