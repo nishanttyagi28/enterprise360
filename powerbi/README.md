@@ -214,6 +214,7 @@ There are **no relationships between any UCI table and any Olist table**. UCI ha
 | UCI Active Customers | KPI_UCI_ACTIVE_CUSTOMERS | SUPPORTED |
 | UCI New Customers | KPI_UCI_NEW_CUSTOMERS | SUPPORTED |
 | UCI Repeat Rate % | KPI_UCI_REPEAT_RATE | SUPPORTED |
+| UCI Lines Without Customer ID % | DERIVED (no coverage KPI in kpis.yaml) | DERIVED: project-lead approved; `has_customer = FALSE` lines / all lines; warehouse check 22.76% (235,151 / 1,033,036) |
 | UCI Cohort Retention % | KPI_UCI_RETENTION | **PARTIAL** |
 | UCI Customers by RFM Segment | KPI_UCI_RFM_SEGMENT | **PARTIAL** |
 | UCI Product Contribution % | KPI_UCI_PRODUCT_CONTRIBUTION | SUPPORTED |
@@ -269,8 +270,7 @@ UCI tables are those named `UCI …` and `_Measures UCI`.
 - RFM segment names. Labels are to be set by the owner (KPI_UCI_RFM_SEGMENT PARTIAL).
 
 **Pending on DE / owner:**
-- RFM segment-label rules.
-- A "share of lines without Customer ID" measure. It is shown as caveat text only, because kpis.yaml has no UCI supporting measure; it needs approval.
+- RFM segment-label rules. I checked `uci_mart_customer_rfm` (dbt SQL and warehouse columns): it has only `r_score`, `f_score`, `m_score`, recency/frequency/monetary and snapshot columns, with **no segment label column**. The report therefore shows R, F and M scores only (R × F matrix, M Score available as a field). No segment names are defined anywhere in the model or report. Labels will be added only when DE/owner publishes them.
 - Retention: the 2009-12 cohort mixes pre-existing customers.
 
 ## Regenerate and validate

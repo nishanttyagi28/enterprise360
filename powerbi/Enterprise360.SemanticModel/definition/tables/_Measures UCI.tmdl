@@ -167,6 +167,20 @@ table '_Measures UCI'
 
 		annotation KPI_Status = SUPPORTED
 
+	/// DERIVED (DERIVED): DERIVED (project-lead approved; no customer-coverage KPI id in kpis.yaml): share of UCI invoice lines without a Customer ID (has_customer = FALSE, mapped to unknown customer -1) over all lines. Shown alongside KPI_UCI_ACTIVE_CUSTOMERS / KPI_UCI_NEW_CUSTOMERS / KPI_UCI_REPEAT_RATE / KPI_UCI_RETENTION, which count identified customers only. Full coverage = 22.76% (235,151 of 1,033,036).
+	measure 'UCI Lines Without Customer ID %' =
+			DIVIDE (
+				CALCULATE ( COUNTROWS ( 'UCI Invoice Line' ), KEEPFILTERS ( 'UCI Invoice Line'[has_customer] = FALSE () ) ),
+				COUNTROWS ( 'UCI Invoice Line' )
+			)
+		formatString: 0.0%
+		displayFolder: UCI Retail (GBP)\Customers
+		lineageTag: 1f1e527f-0166-5654-99ef-55c388b3f990
+
+		annotation KPI_Id = DERIVED
+
+		annotation KPI_Status = DERIVED
+
 	/// KPI_UCI_REPEAT_RATE (SUPPORTED): Identified customers with >=2 sales invoices over full coverage (2009-12-01 to 2011-12-09) / identified customers. Not period-sensitive.
 	measure 'UCI Repeat Rate %' =
 			DIVIDE (

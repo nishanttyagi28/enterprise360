@@ -4,10 +4,10 @@
   "position": {
     "x": 24,
     "y": 460,
-    "z": 1000,
+    "z": 1100,
     "height": 248,
     "width": 1232,
-    "tabOrder": 1000
+    "tabOrder": 1100
   },
   "visual": {
     "visualType": "pivotTable",

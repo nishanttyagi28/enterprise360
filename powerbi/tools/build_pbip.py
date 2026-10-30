@@ -672,6 +672,9 @@ UCI_MEASURES = [
       "        KEEPFILTERS ( 'UCI Customer'[First Purchase Month] >= DATE ( YEAR ( _start ), MONTH ( _start ), 1 ) && 'UCI Customer'[First Purchase Month] <= _end )",
       "    )"],
      "Identified customers whose first purchase month falls in the period. 2009-12 overstated (dataset start, no prior history)."),
+    (f"{UF}\\Customers", "UCI Lines Without Customer ID %", "DERIVED", "DERIVED", "0.0%",
+     ["DIVIDE (", f"    CALCULATE ( COUNTROWS ( {L_} ), KEEPFILTERS ( {L_}[has_customer] = FALSE () ) ),", f"    COUNTROWS ( {L_} )", ")"],
+     "DERIVED (project-lead approved; no customer-coverage KPI id in kpis.yaml): share of UCI invoice lines without a Customer ID (has_customer = FALSE, mapped to unknown customer -1) over all lines. Shown alongside KPI_UCI_ACTIVE_CUSTOMERS / KPI_UCI_NEW_CUSTOMERS / KPI_UCI_REPEAT_RATE / KPI_UCI_RETENTION, which count identified customers only. Full coverage = 22.76% (235,151 of 1,033,036)."),
     (f"{UF}\\Customers", "UCI Repeat Rate %", "KPI_UCI_REPEAT_RATE", "SUPPORTED", "0.0%",
      ["DIVIDE (", "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ), KEEPFILTERS ( 'UCI Customer'[is_repeat_customer] = TRUE () ) ),",
       "    CALCULATE ( COUNTROWS ( 'UCI Customer' ), KEEPFILTERS ( 'UCI Customer'[is_identified] = TRUE () ) )", ")"],
@@ -1283,7 +1286,9 @@ PAGES.append(uo)
 
 uc = Page("uci-customers-retention", "UCI Customers & Retention")
 uci_header(uc)
-uci_cards(uc, [("UCI Active Customers", "Active customers", "Identified customers only (22.8% of lines have no Customer ID)"),
+uci_cards(uc, [("UCI Active Customers", "Active customers", "Identified customers only"),
+               ("UCI Lines Without Customer ID %", "Lines without Customer ID %",
+                "Lines without Customer ID are excluded from all customer KPIs (identified customers only)"),
                ("UCI New Customers", "New customers", NEW_CUST_NOTE),
                ("UCI Repeat Rate %", "Repeat rate % (full coverage)", "Full window 2009-12-01..2011-12-09; not period-sensitive"),
                ("UCI Customers by RFM Segment", "Customers with RFM scores", PARTIAL_UCI_RFM)])

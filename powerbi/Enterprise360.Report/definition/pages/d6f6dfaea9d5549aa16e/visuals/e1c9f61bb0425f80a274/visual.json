@@ -6,7 +6,7 @@
     "y": 108,
     "z": 400,
     "height": 92,
-    "width": 299,
+    "width": 236,
     "tabOrder": 400
   },
   "visual": {
@@ -192,7 +192,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Identified customers only (22.8% of lines have no Customer ID)'"
+                  "Value": "'Identified customers only'"
                 }
               }
             },
