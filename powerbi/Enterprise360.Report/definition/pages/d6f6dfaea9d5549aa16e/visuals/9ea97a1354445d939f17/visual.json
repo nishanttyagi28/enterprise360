@@ -70,10 +70,17 @@
       }
     },
     "objects": {
-      "total": [
+      "subTotals": [
         {
           "properties": {
-            "totals": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
               "expr": {
                 "Literal": {
                   "Value": "false"

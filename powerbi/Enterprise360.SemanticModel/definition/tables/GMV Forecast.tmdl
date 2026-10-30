@@ -78,13 +78,49 @@ table 'GMV Forecast'
 
 		annotation SummarizationSetBy = User
 
+	column 'Interval Method'
+		dataType: string
+		isHidden
+		lineageTag: 17ff8441-757e-5988-8dc2-5a7d3949713a
+		summarizeBy: none
+		sourceColumn: interval_method
+
+		annotation SummarizationSetBy = User
+
+	column 'Selected Model'
+		dataType: string
+		isHidden
+		lineageTag: d983b247-b491-54d9-8918-555996d4e2ed
+		summarizeBy: none
+		sourceColumn: selected_model
+
+		annotation SummarizationSetBy = User
+
+	column 'Selection Reason'
+		dataType: string
+		isHidden
+		lineageTag: 8acb1f82-cdea-5f8f-99ba-b4fdbd6887e5
+		summarizeBy: none
+		sourceColumn: selection_reason
+
+		annotation SummarizationSetBy = User
+
+	column 'Baseline Model'
+		dataType: string
+		isHidden
+		lineageTag: 28864b0c-8233-55cc-a6d3-06fcfb8a7b80
+		summarizeBy: none
+		sourceColumn: baseline_model
+
+		annotation SummarizationSetBy = User
+
 	partition 'GMV Forecast' = m
 		mode: import
 		source =
 				let
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast"]}[Data],
-					Selected = Table.SelectColumns(Data, {"forecast_month", "split", "is_forecast", "actual_gmv", "forecast_gmv", "lower_gmv", "upper_gmv", "baseline_gmv"}),
+					Selected = Table.SelectColumns(Data, {"forecast_month", "split", "is_forecast", "actual_gmv", "forecast_gmv", "lower_gmv", "upper_gmv", "baseline_gmv", "interval_method", "selected_model", "selection_reason", "baseline_model"}),
 					Typed = Table.TransformColumnTypes(Selected, {{"forecast_month", type date}}),
 					Money = Table.TransformColumnTypes(Typed, {{"actual_gmv", Currency.Type}, {"forecast_gmv", Currency.Type}, {"lower_gmv", Currency.Type}, {"upper_gmv", Currency.Type}, {"baseline_gmv", Currency.Type}})
 				in

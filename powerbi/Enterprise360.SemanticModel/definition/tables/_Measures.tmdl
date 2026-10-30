@@ -952,8 +952,8 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
-	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): backtest MAE (BRL) per model x split, 3 months per split. Read per cell; not additive.
-	measure 'Backtest MAE' = SUM ( 'GMV Forecast Backtest'[mae] )
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): backtest MAE (BRL) per model x split, 3 months per split. BLANK unless exactly one split and one model are in context.
+	measure 'Backtest MAE' = IF ( HASONEVALUE ( 'GMV Forecast Backtest'[Split] ) && HASONEVALUE ( 'GMV Forecast Backtest'[Model] ), SUM ( 'GMV Forecast Backtest'[mae] ) )
 		formatString: R$ #,0
 		displayFolder: Forecast & Anomalies
 		lineageTag: a1e0761a-869e-5d46-84ad-364370ace34b
@@ -966,8 +966,8 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
-	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): backtest sMAPE per model x split (smape_pct / 100). Read per cell; not additive.
-	measure 'Backtest sMAPE %' = DIVIDE ( SUM ( 'GMV Forecast Backtest'[smape_pct] ), 100 )
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): backtest sMAPE per model x split (smape_pct / 100). BLANK unless exactly one split and one model are in context.
+	measure 'Backtest sMAPE %' = IF ( HASONEVALUE ( 'GMV Forecast Backtest'[Split] ) && HASONEVALUE ( 'GMV Forecast Backtest'[Model] ), DIVIDE ( SUM ( 'GMV Forecast Backtest'[smape_pct] ), 100 ) )
 		formatString: 0.00%
 		displayFolder: Forecast & Anomalies
 		lineageTag: dd01d281-2bad-5462-8033-f67cffd46f40
@@ -980,8 +980,8 @@ table _Measures
 
 		annotation KPI_ParentKpi = KPI_GMV_FORECAST
 
-	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): n_months in the backtest split (3).
-	measure 'Backtest Months' = SUM ( 'GMV Forecast Backtest'[n_months] )
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (breakdown): n_months in the backtest split (3). BLANK unless exactly one split and one model are in context.
+	measure 'Backtest Months' = IF ( HASONEVALUE ( 'GMV Forecast Backtest'[Split] ) && HASONEVALUE ( 'GMV Forecast Backtest'[Model] ), SUM ( 'GMV Forecast Backtest'[n_months] ) )
 		formatString: #,0
 		displayFolder: Forecast & Anomalies
 		lineageTag: bae780d7-c629-5dc0-8cd8-71b648e09084
@@ -1130,6 +1130,45 @@ table _Measures
 				)
 		displayFolder: Forecast & Anomalies
 		lineageTag: eed537bb-82ef-58e2-91cd-57e04d036b19
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): selected model of the latest run, read from mart_gmv_forecast forward-forecast rows (caption text).
+	measure 'Forecast Selected Model' = CALCULATE ( MAX ( 'GMV Forecast'[Selected Model] ), REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[is_forecast] = TRUE () )
+		displayFolder: Forecast & Anomalies
+		lineageTag: e35827b6-9476-5f8e-a013-d1d92b0d6944
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): selection reason of the latest run, read from mart_gmv_forecast forward-forecast rows (caption text).
+	measure 'Forecast Selection Reason' = CALCULATE ( MAX ( 'GMV Forecast'[Selection Reason] ), REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[is_forecast] = TRUE () )
+		displayFolder: Forecast & Anomalies
+		lineageTag: c4b02ecd-a3c6-5cf7-99e6-99db50167d0b
+
+		annotation KPI_Id = KPI_GMV_FORECAST
+
+		annotation KPI_Status = PARTIAL
+
+		annotation KPI_SupportingKind = formatting
+
+		annotation KPI_ParentKpi = KPI_GMV_FORECAST
+
+	/// KPI_GMV_FORECAST (PARTIAL): Supporting measure (formatting): interval method of the latest run, read from mart_gmv_forecast forward-forecast rows (caption text).
+	measure 'Forecast Interval Method' = CALCULATE ( MAX ( 'GMV Forecast'[Interval Method] ), REMOVEFILTERS ( 'GMV Forecast' ), 'GMV Forecast'[is_forecast] = TRUE () )
+		displayFolder: Forecast & Anomalies
+		lineageTag: 40906c9c-00fe-588b-8866-b55200cb4528
 
 		annotation KPI_Id = KPI_GMV_FORECAST
 

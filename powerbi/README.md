@@ -249,6 +249,18 @@ Only `[GMV Forecast]`, `[GMV Forecast Lower/Upper]`, `[GMV Baseline (Naive)]`, `
 - **New columns:** `interval_method` and `selected_model` do **not** exist yet (checked 2026-10-31). They are mapped in `FC_OPTIONAL_SRC`. Set `FC_SHOW_METHOD = True` in `tools/build_pbip.py` to load them and show the "Interval method / selected model" caption. Both modes were generated and validated.
 - **Never loaded:** `fitted_gmv` and the combined flag under either name, `is_anomaly` or `is_any_anomaly`. The generator asserts this, and the validator `forecast-rules` check fails on either flag name or on `fitted_gmv`.
 
+**DE rebuild (marts in db 2026-10-31; dbt models committed in 9972c3e):**
+- **Backtest load:** the mart now has a `cv` split (39 points) and an `ses` model row. The backtest query keeps only `series = 'gmv'`, `split IN (validation, test)`, and `model IN (selected_model, baseline_model)`. The two model names are read from `mart_gmv_forecast` in M, not hardcoded; today they are holt_damped and naive_last_value.
+- **Backtest measures:** `[Backtest MAE]`, `[Backtest sMAPE %]` and `[Backtest Months]` are BLANK unless exactly one split and one model are in context. Matrix subtotals are off.
+- **Caption:** `selected_model`, `selection_reason` and `interval_method` exist, so `FC_SHOW_METHOD = True`. A caption shows Selected model / Selection reason / Interval method, read from forward-forecast rows: holt_damped / "holt_damped CV sMAPE 16.80% < baseline 21.21%" / conformal_abs_cv.
+- **Slicer subtitle:** the forecast, backtest, anomaly-z and anomaly-months visuals say "Date and reporting-month slicers do not apply (forecast months extend past the reporting window)", and any slicer on the page is set to NoFilter on them.
+- **Not loaded:** train rows now carry `fitted_gmv` (with `forecast_gmv` NULL), and `is_anomaly` was renamed `is_any_anomaly`. Neither is loaded, and the validator and generator ban `fitted_gmv`, `is_anomaly` and `is_any_anomaly`.
+- **Current page values:**
+  - Test sMAPE: model 28.25% vs baseline 13.37%. The verdict note reads "Model does not beat the naive baseline on the test period (test sMAPE 28.25% vs 13.37%)".
+  - The conformal intervals now contain all three test actuals (Jun–Aug 2018 lower bounds 792,667 / 755,410 / 770,407), so `[Test Months Outside Interval]` = 0 and the interval note is **blank**. The earlier "fell below the interval" statement applied to the old ETS intervals only.
+  - Anomalies: 0 GMV anomaly months. Nov 2017 GMV z is 2.84; its orders z is now 4.76.
+  - Forecast 2018-09..2019-02: 939,062 … 1,033,841.
+
 **Column notes vs the spec:**
 - `mart_gmv_forecast_backtest` has an extra `series` column (gmv/orders); it is filtered to gmv in M.
 - `smape_pct` is stored in percent units (28.2545), so it is divided by 100.

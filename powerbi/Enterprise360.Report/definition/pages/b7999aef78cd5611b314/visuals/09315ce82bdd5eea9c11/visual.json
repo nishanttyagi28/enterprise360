@@ -19,7 +19,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Flag = is_gmv_anomaly only (robust z > 3.5 on residuals of the selected model). The combined is_anomaly field (GMV OR orders) is not used. Monthly grain; day-level events like Black Friday are not detectable.",
+                    "value": "Flag = is_gmv_anomaly only (robust z > 3.5 on residuals of the selected model). The combined GMV-or-orders flag (is_any_anomaly, formerly is_anomaly) is not loaded. Monthly grain; day-level events like Black Friday are not detectable.",
                     "textStyle": {
                       "fontSize": "10pt",
                       "color": "#4B5563"

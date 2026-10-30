@@ -272,7 +272,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). 95% interval (lower/upper): model-based, not a guarantee. Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02'"
+                  "Value": "'Date and reporting-month slicers do not apply (forecast months extend past the reporting window). 95% interval (lower/upper): model-based, not a guarantee. Train 2017-01..2018-02 (no fitted values shown), validation 2018-03..05, test 2018-06..08, forecast 2018-09..2019-02'"
                 }
               }
             },

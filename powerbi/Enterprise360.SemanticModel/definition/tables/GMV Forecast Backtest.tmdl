@@ -70,8 +70,11 @@ table 'GMV Forecast Backtest'
 					Source = PostgreSQL.Database(PgServer, PgDatabase),
 					Data = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast_backtest"]}[Data],
 					Selected = Table.SelectColumns(Data, {"series", "model", "split", "n_months", "mae", "smape_pct", "is_selected_model"}),
-					GmvOnly = Table.SelectRows(Selected, each [series] = "gmv"),
-					Money = Table.TransformColumnTypes(GmvOnly, {{"mae", Currency.Type}, {"smape_pct", Currency.Type}})
+					GmvOnly = Table.SelectRows(Selected, each [series] = "gmv" and List.Contains({"validation", "test"}, [split])),
+					Fc = Source{[Schema = PgSchemaMarts, Item = "mart_gmv_forecast"]}[Data],
+					Models = List.RemoveNulls(List.Distinct(Fc[selected_model] & Fc[baseline_model])),
+					ModelRows = Table.SelectRows(GmvOnly, each List.Contains(Models, [model])),
+					Money = Table.TransformColumnTypes(ModelRows, {{"mae", Currency.Type}, {"smape_pct", Currency.Type}})
 				in
 					Money
 

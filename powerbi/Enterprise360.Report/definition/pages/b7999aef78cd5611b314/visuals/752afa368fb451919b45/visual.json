@@ -199,7 +199,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'All dates: date slicers don''t apply (standalone monthly mart). Statistical flags, not confirmed incidents'"
+                  "Value": "'Date and reporting-month slicers do not apply (forecast months extend past the reporting window). Statistical flags, not confirmed incidents'"
                 }
               }
             },
