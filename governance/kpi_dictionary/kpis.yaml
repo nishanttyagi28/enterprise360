@@ -1911,15 +1911,15 @@ kpis:
   status: PARTIAL
   area: marketing_funnel
   definition: 'Share of MQLs in a first_contact_date month cohort that became a closed deal (at any later date). Cohort-based: numerator and denominator share the same MQL cohort; never deals-in-month / MQLs-in-month.'
-  formula: "mart_funnel_monthly.converted_leads_in_cohort / mart_funnel_monthly.mqls = COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)"
-  numerator: 'closed deals whose mql_id is in the cohort'
-  denominator: 'MQLs in the cohort'
+  formula: mart_funnel_monthly.converted_leads_in_cohort / mart_funnel_monthly.mqls = COUNT(DISTINCT d.mql_id WHERE d.mql_id IN cohort) / COUNT(DISTINCT l.mql_id IN cohort), cohort = date_trunc('month', l.first_contact_date)
+  numerator: closed deals whose mql_id is in the cohort
+  denominator: MQLs in the cohort
   unit: percent
   source:
   - olist_marketing_qualified_leads.mql_id
   - olist_marketing_qualified_leads.first_contact_date
   - olist_closed_deals.mql_id
-  source_tag: 'CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)'
+  source_tag: CONFIRMED (DE commit bb277c9; core.fct_leads, core.fct_closed_deals, core.dim_lead_origin, marts.mart_funnel_monthly, marts.mart_funnel_time_to_close committed and built in enterprise360 on 2026-10-31)
   fact_dependencies:
   - fct_leads
   - fct_closed_deals
@@ -1927,34 +1927,39 @@ kpis:
   dimension_dependencies:
   - dim_date
   - dim_lead_origin
-  grain: 'first-contact month cohort'
+  grain: first-contact month cohort
   refresh: daily batch after ingestion + dbt build (static historical dataset)
   owner: Head of Marketing
   target: to be set by owner
   benchmark: to be set by owner
   validation_rules:
-  - '0 <= conversion <= 1'
-  - 'numerator <= denominator per cohort'
+  - 0 <= conversion <= 1
+  - numerator <= denominator per cohort
   - 'is_cohort_mature: cohort mature when cohort month end + 210 days <= max(won_date) in data (210 = observed p95 days-to-close; locked by owner 2026-10-31); Apr and May 2018 cohorts are immature'
-  - 'mart_funnel_monthly must expose converted_leads_in_cohort, mqls and is_cohort_mature'
-  - 'overall all-cohort value 842/8,000 = 10.53% (2026-10-31)'
+  - mart_funnel_monthly must expose converted_leads_in_cohort, mqls and is_cohort_mature
+  - overall all-cohort value 842/8,000 = 10.53% (2026-10-31)
+  - mart_funnel_monthly.is_deal_window_complete present; false exactly for cohorts before first won month
   supporting_measures:
   - measure: '[Converted Leads in Cohort]'
     kind: breakdown
     purpose: 'numerator: MQLs in the first-contact cohort with a closed deal at any later date (Lead[is_closed]); attributed to first-contact month, not won month'
   - measure: '[Cohort Is Mature]'
     kind: formatting
-    purpose: '1/0 per cohort month only; BLANK when more than one cohort month is in context (Power BI 727558e). 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0)'
+    purpose: 1/0 per cohort month only; BLANK when more than one cohort month is in context (Power BI 727558e). 1 when cohort month end + 210 days <= max(won_date), else 0 (Apr and May 2018 = 0)
   - measure: '[Cohort Maturity Colour]'
     kind: formatting
-    purpose: 'hidden helper colouring immature cohorts (from [Cohort Is Mature]); not displayed as a value'
+    purpose: hidden helper colouring immature cohorts (from [Cohort Is Mature]); not displayed as a value
+  - measure: '[Deal Window Complete]'
+    kind: formatting
+    purpose: 'mart_funnel_monthly.is_deal_window_complete: false for cohorts 2017-06..2017-11 (start before the first won month 2017-12; earlier wins not recorded); separate from is_cohort_mature'
   caveats:
-  - 'Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.'
-  - 'Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.'
+  - Funnel data is a separate Olist dataset (8,000 MQLs, 842 closed deals); never blend lead counts with order KPIs except via seller_id, and only 380 of 842 closed-deal seller_ids appear in olist_order_items.
+  - Closed-deals file only contains wins dated 2017-12-05..2018-11-14; no wins before Dec 2017 exist, so 2017 first-contact cohorts are under-observed (left-truncated deal capture) as well as right-censored for 2018 cohorts.
   - 'Right-censoring: recent cohorts have had less time to close. Maturity window = 210 days (observed p95 of first_contact->won days; p75 55, p90 162, max 427), locked by owner. With max won_date 2018-11-14, Apr and May 2018 cohorts are immature — report mature cohorts only or show the flag.'
-  - 'Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.'
-  - 'Ratio of sums per cohort; never average monthly rates across cohorts or origins.'
-  version: 1.0.3
+  - Observed cohort rates rise from 0.84% (Jul 2017) to ~13–14% (Jan–Apr 2018) and 9.98% (May 2018); the 2017 lows are largely a deal-capture artefact (no wins recorded before Dec 2017), not true performance.
+  - Ratio of sums per cohort; never average monthly rates across cohorts or origins.
+  - 'is_deal_window_complete = false for 2017-06..2017-11 cohorts: deal recording starts 2017-12, so these cohorts are left-censored and must NOT be read as real conversion performance. Independent of is_cohort_mature (right-censoring, Apr–May 2018).'
+  version: 1.0.4
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
@@ -1976,8 +1981,13 @@ kpis:
     author: KPI & Quality
     change: '[Cohort Is Mature] is 1/0 per cohort month only; BLANK when more than one cohort month is in context (aligned to Power BI 727558e)'
     pr: TBD
+  - version: 1.0.4
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: added is_deal_window_complete (left-censoring flag, 2017-06..2017-11) as supporting flag and caveat
+    pr: TBD
   implementations:
-    dbt: 'marts.mart_funnel_monthly (mqls, converted_leads_in_cohort, conversion_rate, is_cohort_mature); PBI computes from core.fct_leads rows'
+    dbt: marts.mart_funnel_monthly (mqls, converted_leads_in_cohort, conversion_rate, is_cohort_mature); PBI computes from core.fct_leads rows
     sql: (none; dbt authoritative once built)
     power_bi_dax: '[Lead-to-Deal Conversion %] = DIVIDE([Converted Leads in Cohort],[MQLs]); cohort via Lead[first_contact_date_key] -> Date'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -2043,15 +2053,15 @@ kpis:
   name: GMV Forecast (exploratory)
   status: PARTIAL
   area: forecasting
-  definition: 'Exploratory model-based MONTHLY forecast of KPI_GMV (SUM item_price, freight excluded; NOT revenue), horizon 6 months (2018-09..2019-02). Trained only on months with is_complete_month AND is_reporting_month (2017-01..2018-08, 20 months; source marts.mart_business_overview_monthly, actuals reconcile to fct_order_items with 0.00 difference). Method: ETS candidates Holt damped additive trend vs SES, selected on validation sMAPE (holt_damped selected); baseline naive_last_value (seasonal naive infeasible, < 2 years). Backtest (run 7476f047, 3 points per split, monthly): VALIDATION model holt_damped MAE 60,295 BRL / sMAPE 5.80% vs naive_last_value MAE 147,948 / sMAPE 16.11%; TEST model MAE 287,398 / sMAPE 28.25% vs baseline MAE 124,745 / sMAPE 13.37%. The selected model does NOT beat the naive baseline on the test holdout.'
-  formula: forecast_gmv = ETS(A,Ad,N) refit on all 20 usable months; compare to baseline_gmv (last value); sMAPE = mean(2|a-f|/(|a|+|f|))
+  definition: 'Exploratory model-based MONTHLY forecast of KPI_GMV (SUM item_price, freight excluded; NOT revenue), horizon 6 months (2018-09..2019-02, 939,062..1,033,841 BRL). Trained only on is_complete_month AND is_reporting_month months (2017-01..2018-08, 20 months); actuals reconcile to fct_order_items (0.00). Selection: expanding-window rolling-origin CV on train+validation only (never test) among holt_damped / ses, with fallback to naive_last_value if no candidate beats it on CV; published as selected_model + selection_reason (''holt_damped CV sMAPE 16.80% < baseline 21.21%''). Intervals: interval_method = conformal_abs_cv (95% split-conformal half-width per horizon from CV absolute errors computed inside the data before each block''s cutoff; test-block residuals come from train+validation only, no leakage). Coverage: 3 of 3 test and 3 of 3 validation actuals inside for both GMV and orders. Backtest (run 58cb013e, monthly GMV, sMAPE): CV (rolling-origin on train+validation, 39 points) holt_damped 16.80% vs naive 21.21% (ses 20.80%); VALIDATION (3) 5.80% vs 16.11%; TEST (3) 28.25% vs 13.37% (MAE 287,398 vs 124,745 BRL). Holt damped wins CV but LOSES to the naive baseline on test.'
+  formula: forecast_gmv = selected_model refit on data up to cutoff; lower/upper = forecast ± conformal q95(|CV error_h|); baseline_gmv = last value; sMAPE = mean(2|a-f|/(|a|+|f|))
   numerator: —
   denominator: —
   unit: BRL
   source:
   - olist_order_items.price
   - olist_orders.order_purchase_timestamp
-  source_tag: PROPOSED — pending DE commit (marts.mart_gmv_forecast, marts.mart_gmv_anomalies, marts.mart_gmv_forecast_backtest built from analytics.forecast_* run 7476f047 on 2026-10-30 20:31 UTC; SQL/Python uncommitted on 2026-10-31)
+  source_tag: CONFIRMED (DE commit 9972c3e; marts.mart_gmv_forecast, mart_gmv_anomalies, mart_gmv_forecast_backtest verified in enterprise360, run 58cb013e generated 2026-10-31 02:13 IST)
   fact_dependencies:
   - fct_order_items
   - marts.mart_business_overview_monthly
@@ -2069,10 +2079,12 @@ kpis:
   - no validation/test/forecast row at or before its training_cutoff (assert_forecast_no_train_test_overlap)
   - forecast_month unique and contiguous
   - backtest has selected model and naive baseline per series x split
-  - WARN if selected model sMAPE >= baseline on test (assert_forecast_model_beats_baseline; currently WARN)
   - actual_gmv == mart_business_overview_monthly.gmv == SUM(fct_order_items.item_price) by month (0.00)
   - cite accuracy only from mart_gmv_forecast_backtest; label 'backtest, 3 months'
   - 'Power BI: [GMV Forecast] only where is_forecast; [GMV Backtest Forecast] only validation/test; backtest table filtered to validation/test (or cv explicitly labelled) with no totals'
+  - backtest grain unique (series, model, split) with split in cv|validation|test; columns n_months, mae, smape_pct (percent number), mape_pct, is_selected_model
+  - WARN only if selected model is not the baseline AND its test sMAPE >= baseline's (assert_forecast_model_beats_baseline; currently WARN)
+  - 'train rows: fitted_gmv set, forecast_gmv NULL; never plot fitted_gmv as a forecast'
   supporting_measures:
   - measure: '[GMV Forecast Lower]'
     kind: formatting
@@ -2098,20 +2110,45 @@ kpis:
   - measure: '[Backtest Months]'
     kind: breakdown
     purpose: n_months per split (3 for validation/test); always shown next to accuracy
+  - measure: '[Backtest Test sMAPE (Model)]'
+    kind: breakdown
+    purpose: selected model test sMAPE (28.25%); drives the verdict
+  - measure: '[Backtest Test sMAPE (Baseline)]'
+    kind: breakdown
+    purpose: naive baseline test sMAPE (13.37%); drives the verdict
+  - measure: '[Backtest Test Verdict]'
+    kind: formatting
+    purpose: 'data-driven text: model beats / does not beat the naive baseline on test'
+  - measure: '[Test Months Outside Interval]'
+    kind: breakdown
+    purpose: test months with actual outside lower/upper (0 of 3)
+  - measure: '[Test Interval Note]'
+    kind: formatting
+    purpose: dynamic coverage note; BLANK when all test actuals are inside
+  - measure: '[Forecast Selected Model]'
+    kind: formatting
+    purpose: selected_model caption (holt_damped)
+  - measure: '[Forecast Selection Reason]'
+    kind: formatting
+    purpose: selection_reason caption
+  - measure: '[Forecast Interval Method]'
+    kind: formatting
+    purpose: interval_method caption (conformal_abs_cv)
   caveats:
   - Exploratory; not a KPI of record; GMV not revenue.
-  - 'Backtest (run 7476f047, 3 points per split, monthly): VALIDATION model holt_damped MAE 60,295 BRL / sMAPE 5.80% vs naive_last_value MAE 147,948 / sMAPE 16.11%; TEST model MAE 287,398 / sMAPE 28.25% vs baseline MAE 124,745 / sMAPE 13.37%. The selected model does NOT beat the naive baseline on the test holdout.'
   - Metrics are on 3 points per split; not statistically meaningful. Model selection was done on 3 validation months.
-  - 'All 3 test actuals (Jun–Aug 2018: 865,124 / 895,507 / 854,686) fall BELOW the 95% interval lower bounds (932,111 / 977,905 / 1,021,685): intervals are under-dispersed / not calibrated.'
   - Damped trend extrapolates growth (forecast 939k rising to 1.03M) while Jun–Aug 2018 actuals declined; forecast months 2018-09..2019-02 have no actuals (dataset ends) and cannot be verified.
-  - Train rows carry in-sample fitted values in forecast_gmv; never plot them as a forecast.
   - Only 20 usable months; Black Friday Nov 2017 (1.01M) dominates; no yearly seasonality modelled.
   - 'Forecast marts are not related to Date: date and reporting-month slicers do not filter them; the page must state this.'
   - Backtest is loaded with series='gmv' only (mart also holds series='orders').
   - smape_pct is a percentage number (0..200), divide by 100 for a % format.
   - No headline accuracy card; 'model does not beat baseline' note must accompany backtest (data-driven preferred while DE reworks the model).
-  - 'Pending DE rework (uncommitted; seen in DB 2026-10-31): mart_gmv_forecast adds selected_model, selection_reason, interval_method and fitted_gmv (train-row in-sample fit moved out of forecast_gmv, now NULL on train); mart_gmv_anomalies renames is_anomaly -> is_any_anomaly; backtest adds a ''cv'' split (39 points) and ''ses'' rows. Validation/test values unchanged.'
-  version: 1.0.2
+  - 'Backtest (run 58cb013e, monthly GMV, sMAPE): CV (rolling-origin on train+validation, 39 points) holt_damped 16.80% vs naive 21.21% (ses 20.80%); VALIDATION (3) 5.80% vs 16.11%; TEST (3) 28.25% vs 13.37% (MAE 287,398 vs 124,745 BRL). Holt damped wins CV but LOSES to the naive baseline on test.'
+  - 'CV selected holt_damped but it loses to the naive baseline on the 3-month test: the forecast is exploratory and must not drive decisions; the naive baseline is the stronger reference.'
+  - Conformal intervals cover 3/3 test months only because they are wide (test band ~755k–1.64M BRL); 3 points cannot establish calibration.
+  - 'Orders series: selected holt_damped loses to naive on both validation (14.56% vs 4.05%) and test (22.31% vs 8.35%).'
+  - interval_method is NULL on train rows (no interval there); read it from forecast rows.
+  version: 1.0.3
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
@@ -2128,8 +2165,13 @@ kpis:
     author: KPI & Quality
     change: 'recorded Power BI supporting measures (f8d4f4c); notes: no Date relationship, series=''gmv'', smape_pct percent number, pending DE rework columns'
     pr: TBD
+  - version: 1.0.3
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED (DE 9972c3e); CV selection, conformal_abs_cv intervals with coverage, backtest grain; Power BI fc96d1b measures; caveat model loses to baseline on test
+    pr: TBD
   implementations:
-    dbt: marts.mart_gmv_forecast (forecast_gmv, lower_gmv, upper_gmv, baseline_gmv, split, is_forecast); marts.mart_gmv_forecast_backtest (mae, smape_pct, n_months); produced by python -m analytics.forecast
+    dbt: marts.mart_gmv_forecast (forecast_gmv, lower_gmv, upper_gmv, baseline_gmv, fitted_gmv [train only], split, is_forecast, selected_model, selection_reason, interval_method); marts.mart_gmv_forecast_backtest (series x model x split); python -m analytics.forecast
     sql: (none; dbt authoritative)
     power_bi_dax: '[GMV Forecast] (exploratory)'
     streamlit: app/services/kpis.py → reads dbt mart; no recomputation
@@ -2138,7 +2180,7 @@ kpis:
   name: GMV Anomaly Flag (exploratory)
   status: PARTIAL
   area: forecasting
-  definition: 'Exploratory MONTHLY flag (not daily): month flagged when robust_z = |r - median(r)| / (1.4826 × MAD(r)) > 3.5, where r = actual GMV − expected and expected = one-step-ahead in-sample fit of the selected ETS model (holt_damped) fitted on all 20 complete reporting months. Use mart_gmv_anomalies.is_gmv_anomaly (NOT is_anomaly, which ORs in the orders anomaly). Current run: 0 GMV anomaly months; Nov 2017 robust_z 2.84 (not flagged); May 2018 0.19 (not flagged).'
+  definition: 'Exploratory MONTHLY flag (not daily): month flagged when robust_z = |r - median(r)| / (1.4826 × MAD(r)) > 3.5, where r = actual GMV − expected and expected = one-step-ahead in-sample fit of the selected ETS model (holt_damped) fitted on all 20 complete reporting months. Use mart_gmv_anomalies.is_gmv_anomaly; is_any_anomaly = is_gmv_anomaly OR is_orders_anomaly (no is_anomaly column remains) and must not be shown as a GMV anomaly. Current run: 0 GMV anomaly months; Nov 2017 robust_z 2.84 (not flagged); May 2018 0.19 (not flagged).'
   formula: is_gmv_anomaly = |r - median(r)| / (1.4826 * MAD(r)) > 3.5, r = gmv - expected_gmv
   numerator: —
   denominator: —
@@ -2146,7 +2188,7 @@ kpis:
   source:
   - olist_order_items.price
   - olist_orders.order_purchase_timestamp
-  source_tag: PROPOSED — pending DE commit (marts.mart_gmv_forecast, marts.mart_gmv_anomalies, marts.mart_gmv_forecast_backtest built from analytics.forecast_* run 7476f047 on 2026-10-30 20:31 UTC; SQL/Python uncommitted on 2026-10-31)
+  source_tag: CONFIRMED (DE commit 9972c3e; marts.mart_gmv_forecast, mart_gmv_anomalies, mart_gmv_forecast_backtest verified in enterprise360, run 58cb013e generated 2026-10-31 02:13 IST)
   fact_dependencies:
   - fct_order_items
   - marts.mart_business_overview_monthly
@@ -2162,7 +2204,9 @@ kpis:
   - anomaly_date unique (assert_forecast_grain_anomalies)
   - z_threshold = 3.5 stored per row
   - 'only complete reporting months evaluated (20 rows: 2017-01..2018-08); partial 2016 months and the 2018-09/10 tail excluded'
-  - GMV KPI uses is_gmv_anomaly; is_anomaly (being renamed is_any_anomaly) is GMV OR orders and must not be labelled a GMV anomaly
+  - no column named is_anomaly in the anomaly or forecast marts
+  - is_any_anomaly == (is_gmv_anomaly OR is_orders_anomaly)
+  - GMV KPI uses is_gmv_anomaly only; is_any_anomaly never loaded in Power BI
   supporting_measures:
   - measure: '[GMV Anomaly Months]'
     kind: breakdown
@@ -2178,12 +2222,12 @@ kpis:
     purpose: orders_robust_z as its own series labelled "orders flag, not GMV"; never counted as a GMV anomaly
   caveats:
   - Flags are statistical, not confirmed incidents.
-  - 'Monthly grain cannot isolate day events: Black Friday 2017-11-24 shows only as Nov 2017 (GMV robust_z 2.84, not flagged; orders z 5.60 flagged); truckers'' strike May 2018 not flagged (0.19).'
+  - 'Monthly grain cannot isolate day events: Black Friday 2017-11-24 shows only as Nov 2017 (GMV robust_z 2.84, not flagged; orders z 4.76 not flagged; 1 orders anomaly month in run 58cb013e); truckers'' strike May 2018 not flagged (0.19).'
   - Expected comes from a model whose parameters were estimated on all months including the evaluated month (in-sample, not a centered window but not strictly out-of-sample); residual MAD is over the same 20 points.
   - With 20 points the threshold has low power; 0 flags is not evidence of no incidents.
   - 'Anomaly mart is not related to Date: date and reporting-month slicers do not filter it; the page must state this.'
-  - 'Pending DE rework (uncommitted; seen in DB 2026-10-31): mart_gmv_forecast adds selected_model, selection_reason, interval_method and fitted_gmv (train-row in-sample fit moved out of forecast_gmv, now NULL on train); mart_gmv_anomalies renames is_anomaly -> is_any_anomaly; backtest adds a ''cv'' split (39 points) and ''ses'' rows. Validation/test values unchanged.'
-  version: 1.0.2
+  - Expected is in-sample (params on all 20 months), documented in docs/forecasting.md; descriptive, not out-of-sample.
+  version: 1.0.3
   change_log:
   - version: 1.0.0
     date: '2026-10-31'
@@ -2199,6 +2243,11 @@ kpis:
     date: '2026-10-31'
     author: KPI & Quality
     change: recorded Power BI supporting measures (f8d4f4c); Orders Robust Z breakdown labelled orders flag not GMV; no Date relationship; is_anomaly -> is_any_anomaly pending DE
+    pr: TBD
+  - version: 1.0.3
+    date: '2026-10-31'
+    author: KPI & Quality
+    change: sources CONFIRMED (DE 9972c3e); is_any_anomaly vs is_gmv_anomaly; in-sample expectation documented
     pr: TBD
   implementations:
     dbt: marts.mart_gmv_anomalies (gmv, expected_gmv, gmv_residual, gmv_robust_z, is_gmv_anomaly, z_threshold)
