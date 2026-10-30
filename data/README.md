@@ -45,3 +45,13 @@ Downloaded 2026-10-30 (IST) into `data/raw/`. Row counts measured by me with pan
 Cross-check: UCI Online Retail II measured 525,461 + 541,910 = 1,067,371 rows, matching UCI-stated 1,067,371 instances (https://archive.ics.uci.edu/api/dataset?id=502). Olist publisher describes ~100k orders (measured 99,441) and Marketing Funnel 8k MQLs (measured 8,000).
 
 See `raw/SCHEMA.md` for columns and join keys.
+
+## UCI Online Retail II: final build row counts
+Checksums for the two CSVs above match `docs/blueprint/uci-online-retail-plan.md` (byte sizes match too). I re-measured the counts below with pandas, comparing every column as a string.
+
+| Step | Rows |
+|---|---|
+| Raw lines (both sheets) | 1,067,371 |
+| Exact duplicates dropped within each sheet (6,865 + 5,268) | 12,133 |
+| Overlap lines dropped (2010-2011 rows also in 2009-2010) | 22,202 |
+| Fact lines left | 1,033,036 |
